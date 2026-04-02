@@ -124,3 +124,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helve
     .profile { padding: 16px; }
     .profile img { width: 44px; height: 44px; }
 }
+.sticker-panel {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    left: 20px;
+    background: white;
+    border-radius: 20px;
+    padding: 16px;
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    z-index: 10;
+}
+.sticker-pack {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #f3e8ff;
+    border-radius: 16px;
+}
+.pack-name {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #9b59b6;
+}
