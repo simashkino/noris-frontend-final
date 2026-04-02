@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Noris Messenger</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0e1621; color: #fff; }
+        .auth { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #0e1621 0%, #17212b 100%); }
+        .auth-card { background: #17212b; padding: 40px; border-radius: 24px; width: 100%; max-width: 400px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        .auth-card h1 { text-align: center; margin-bottom: 30px; font-size: 32px; color: #fff; }
+        .auth-card input { width: 100%; padding: 12px 16px; margin-bottom: 12px; background: #242f3d; border: none; border-radius: 12px; color: #fff; font-size: 16px; }
+        .auth-card button { width: 100%; padding: 12px; background: #2b5278; border: none; border-radius: 12px; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 12px; }
+        .app { display: flex; height: 100vh; }
+        .sidebar { width: 320px; background: #17212b; border-right: 1px solid #2b2f36; display: flex; flex-direction: column; }
+        .profile { padding: 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #2b2f36; }
+        .profile img { width: 48px; height: 48px; border-radius: 50%; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; }
+        .messages { flex: 1; padding: 20px; overflow-y: auto; }
+        .message { margin-bottom: 12px; display: flex; gap: 12px; }
+        .message.mine { justify-content: flex-end; }
+        .message-content { background: #242f3d; padding: 10px 14px; border-radius: 18px; max-width: 70%; }
+        .message.mine .message-content { background: #2b5278; }
+        .input-area { padding: 16px; background: #17212b; display: flex; gap: 12px; border-top: 1px solid #2b2f36; }
+        .input-area input { flex: 1; padding: 12px; background: #242f3d; border: none; border-radius: 24px; color: #fff; }
+        .input-area button { padding: 12px 24px; background: #2b5278; border: none; border-radius: 24px; color: #fff; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+    const API_URL = 'https://noris-backend.onrender.com/api';
+    
+    let token = localStorage.getItem('token');
+    let user = null;
+    let socket = null;
+    let activeChat = null;
+    let messages = [];
+    
+    function apiCall(endpoint, options = {}) {
+        return fetch(API_URL + endpoint, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                ...options.headers
+            }
+        }).then(res => res.json());
+    }
+    
+    function render() {
+        if (!token) {
+            document.getElementById('root').innerHTML = \`
+                <div class="auth">
+                    <div class="auth-card">
+                        <h1>✨ Noris</h1>
+                        <input id="email" placeholder="Email" type="email">
+                        <input id="password" placeholder="Пароль" type="password">
+                        <button onclick="login()">Войти</button>
+                        <button onclick="showRegister()">Создать аккаунт</button>
+                    </div>
+                </div>
+            \`;
+        } else if (!user) {
+            document.getElementById('root').innerHTML = '<div class="auth"><div class="auth-card"><h1>Загрузка...</h1></div></div>';
+            apiCall('/users/me').then(data => {
+                if (data.user) {
+                    user = data.user;
+                    initSocket();
+                    render();
+                } else {
+                    token = null;
+                    localStorage.removeItem('token');
+                    render();
+                }
+            });
+        } else {
+            document.getElementById('root').innerHTML = \`
+                <div class="app">
+                    <div class="sidebar">
+                        <div class="profile">
+                            <img src="\${user.avatar || 'https://ui-avatars.com/api/?name='+user.firstName+'+'+user.lastName+'&background=2b5278&color=fff'}" alt="">
+                            <div><strong>\${user.firstName} \${user.lastName}</strong><span>@\${user.username}</span></div>
+                        </div>
+                        <div class="search-box" style="padding:16px">
+                            <input id="searchInput" placeholder="Поиск по никнейму..." style="width:100%;padding:10px;background:#242f3d;border:none;border-radius:20px;color:#fff">
+                            <button onclick="searchUsers()" style="margin-top:8px;width:100%;padding:10px;background:#2b5278;border:none;border-radius:20px;color:#fff">Найти</button>
+                        </div>
+                        <div id="searchResults" style="padding:8px 16px"></div>
+                        <div class="chats" style="padding:16px">
+                            <h3 style="color:#6c7883;margin-bottom:12px">Чаты</h3>
+                            <div id="chatsList"></div>
+                        </div>
+                    </div>
+                    <div class="chat-area">
+                        <div class="chat-header" style="padding:16px;background:#17212b;border-bottom:1px solid #2b2f36">
+                            <strong id="chatName">\${activeChat ? activeChat.name : 'Noris Messenger'}</strong>
+                        </div>
+                        <div class="messages" id="messages">
+                            \${messages.map(msg => \`
+                                <div class="message \${msg.senderId === user.id ? 'mine' : 'theirs'}">
+                                    <div class="message-content">
+                                        <p>\${msg.content}</p>
+                                        <small style="color:#6c7883">\${new Date(msg.timestamp).toLocaleTimeString()}</small>
+                                    </div>
+                                </div>
+                            \`).join('')}
+                        </div>
+                        <div class="input-area">
+                            <input id="messageInput" placeholder="Сообщение..." onkeypress="if(event.key==='Enter') sendMessage()">
+                            <button onclick="sendMessage()">➤</button>
+                        </div>
+                    </div>
+                </div>
+            \`;
+            fetchChats();
+        }
+    }
+    
+    function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }).then(data => {
+            if (data.token) {
+                token = data.token;
+                localStorage.setItem('token', token);
+                user = data.user;
+                initSocket();
+                render();
+            } else {
+                alert('Ошибка входа');
+            }
+        });
+    }
+    
+    function showRegister() {
+        document.getElementById('root').innerHTML = \`
+            <div class="auth">
+                <div class="auth-card">
+                    <h1>Регистрация</h1>
+                    <input id="email" placeholder="Email">
+                    <input id="password" placeholder="Пароль" type="password">
+                    <input id="firstName" placeholder="Имя">
+                    <input id="lastName" placeholder="Фамилия">
+                    <input id="username" placeholder="Никнейм (латиница)">
+                    <button onclick="register()">Зарегистрироваться</button>
+                    <button onclick="render()">Назад</button>
+                </div>
+            </div>
+        \`;
+    }
+    
+    function register() {
+        const data = {
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+            firstName: document.getElementById('firstName').value,
+            lastName: document.getElementById('lastName').value,
+            username: document.getElementById('username').value
+        };
+        apiCall('/auth/register', { method: 'POST', body: JSON.stringify(data) }).then(res => {
+            alert(res.message || 'Код отправлен на email');
+        });
+    }
+    
+    function initSocket() {
+        if (socket) socket.close();
+        socket = io('https://noris-backend.onrender.com', { auth: { token } });
+        socket.on('new_message', (msg) => {
+            if (activeChat && (msg.chatId === activeChat.id || msg.senderId === activeChat.id)) {
+                messages.push(msg);
+                render();
+            }
+        });
+    }
+    
+    function fetchChats() {
+        apiCall('/chats').then(data => {
+            const chatsList = document.getElementById('chatsList');
+            if (chatsList) {
+                chatsList.innerHTML = data.map(chat => \`
+                    <div onclick="openChat({id:'\${chat.id}',name:'\${chat.name}'})" style="padding:10px;border-radius:12px;cursor:pointer;margin-bottom:4px;background:\${activeChat?.id === chat.id ? '#2b5278' : 'transparent'}">
+                        \${chat.name}
+                    </div>
+                \`).join('');
+            }
+        });
+    }
+    
+    function openChat(chat) {
+        activeChat = chat;
+        messages = [];
+        render();
+        apiCall('/messages/' + chat.id).then(data => {
+            messages = data;
+            render();
+        });
+        if (socket) socket.emit('join_group', chat.id);
+    }
+    
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        if (!input || !input.value.trim() || !activeChat) return;
+        const content = input.value;
+        socket.emit('send_message', {
+            chatId: activeChat.id,
+            content: content,
+            type: 'text',
+            receiverId: activeChat.type === 'user' ? activeChat.id : null
+        });
+        input.value = '';
+    }
+    
+    function searchUsers() {
+        const q = document.getElementById('searchInput').value;
+        if (!q) return;
+        apiCall('/users/search?q=' + q).then(users => {
+            const results = document.getElementById('searchResults');
+            results.innerHTML = users.map(u => \`
+                <div onclick="addContact('\${u.id}')" style="padding:8px;border-radius:8px;cursor:pointer;margin-bottom:4px;background:#242f3d">
+                    @\${u.username} - \${u.firstName} \${u.lastName}
+                </div>
+            \`).join('');
+        });
+    }
+    
+    function addContact(contactId) {
+        apiCall('/users/contact', { method: 'POST', body: JSON.stringify({ contactId }) }).then(() => {
+            alert('Контакт добавлен');
+            render();
+        });
+    }
+    
+    render();
+</script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</body>
+</html>
