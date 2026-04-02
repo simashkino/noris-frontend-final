@@ -3,22 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Noris Messenger</title>
+    <title>Noris Messenger — Лавандовый рай</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: #0e1621;
-            color: #e1e9f0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f9f6ff;
             height: 100vh;
             overflow: hidden;
+        }
+
+        /* Лавандовая тема */
+        :root {
+            --lavender-light: #f3e8ff;
+            --lavender: #e6d0ff;
+            --lavender-dark: #c4a5e3;
+            --purple: #9b59b6;
+            --purple-dark: #8e44ad;
+            --white: #ffffff;
+            --gray-light: #f5f5f5;
+            --gray: #ddd;
+            --text-dark: #4a4a4a;
+            --text-light: #7f8c8d;
         }
 
         /* Аутентификация */
@@ -27,112 +40,104 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #0e1621 0%, #17212b 100%);
+            background: linear-gradient(135deg, #e8d5ff 0%, #d4b8ff 100%);
             padding: 20px;
         }
 
         .auth-card {
-            background: #17212b;
-            border-radius: 28px;
-            padding: 32px 24px;
+            background: var(--white);
+            border-radius: 32px;
+            padding: 40px 32px;
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            max-width: 420px;
+            box-shadow: 0 20px 40px rgba(155, 89, 182, 0.2);
+            text-align: center;
         }
 
         .auth-card h1 {
-            font-size: 32px;
-            font-weight: 600;
-            text-align: center;
+            font-size: 36px;
+            color: var(--purple);
             margin-bottom: 8px;
-            background: linear-gradient(135deg, #fff, #6c8fb3);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
         }
 
         .auth-card .sub {
-            text-align: center;
-            color: #6c7883;
+            color: var(--text-light);
             margin-bottom: 32px;
-            font-size: 14px;
         }
 
         .auth-card input {
             width: 100%;
-            padding: 14px 16px;
+            padding: 14px 18px;
             margin-bottom: 16px;
-            background: #242f3d;
-            border: 1px solid #2b3a4a;
-            border-radius: 16px;
-            color: #fff;
+            background: var(--gray-light);
+            border: 1px solid var(--gray);
+            border-radius: 24px;
             font-size: 16px;
-            transition: all 0.2s;
+            transition: all 0.3s;
         }
 
         .auth-card input:focus {
             outline: none;
-            border-color: #2b5278;
-            background: #2a3645;
+            border-color: var(--purple);
+            box-shadow: 0 0 0 3px rgba(155, 89, 182, 0.1);
         }
 
         .auth-card button {
             width: 100%;
             padding: 14px;
-            background: #2b5278;
+            background: linear-gradient(135deg, var(--purple), var(--purple-dark));
             border: none;
-            border-radius: 16px;
+            border-radius: 28px;
             color: white;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             margin-top: 8px;
-            transition: background 0.2s;
+            transition: transform 0.2s;
         }
 
         .auth-card button:hover {
-            background: #366e9e;
+            transform: translateY(-2px);
         }
 
-        .auth-card .secondary-btn {
-            background: transparent;
-            border: 1px solid #2b5278;
-            margin-top: 12px;
-        }
-
-        .auth-card .secondary-btn:hover {
-            background: rgba(43, 82, 120, 0.2);
+        .secondary-btn {
+            background: transparent !important;
+            color: var(--purple) !important;
+            border: 2px solid var(--purple) !important;
         }
 
         /* Основной интерфейс */
         .app {
             display: flex;
             height: 100vh;
+            background: var(--lavender-light);
         }
 
         .sidebar {
             width: 320px;
-            background: #17212b;
-            border-right: 1px solid #2b2f36;
+            background: var(--white);
+            border-right: 1px solid var(--lavender);
             display: flex;
             flex-direction: column;
             overflow-y: auto;
+            box-shadow: 2px 0 12px rgba(0, 0, 0, 0.05);
         }
 
         .profile {
-            padding: 20px;
+            padding: 24px 20px;
+            background: linear-gradient(135deg, var(--lavender), var(--lavender-light));
             display: flex;
             align-items: center;
             gap: 12px;
-            border-bottom: 1px solid #2b2f36;
+            border-bottom: 1px solid var(--lavender);
         }
 
         .profile img {
-            width: 48px;
-            height: 48px;
+            width: 56px;
+            height: 56px;
             border-radius: 50%;
             object-fit: cover;
-            background: #2b5278;
+            border: 3px solid var(--white);
         }
 
         .profile-info {
@@ -140,18 +145,19 @@
         }
 
         .profile-name {
-            font-weight: 600;
-            font-size: 16px;
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--purple-dark);
         }
 
         .profile-username {
-            font-size: 12px;
-            color: #6c7883;
+            font-size: 13px;
+            color: var(--text-light);
         }
 
         .search-section {
             padding: 16px;
-            border-bottom: 1px solid #2b2f36;
+            border-bottom: 1px solid var(--lavender);
         }
 
         .search-box {
@@ -162,21 +168,19 @@
         .search-box input {
             flex: 1;
             padding: 10px 14px;
-            background: #242f3d;
-            border: none;
-            border-radius: 20px;
-            color: #fff;
+            background: var(--gray-light);
+            border: 1px solid var(--gray);
+            border-radius: 24px;
             font-size: 14px;
         }
 
         .search-box button {
             padding: 10px 18px;
-            background: #2b5278;
+            background: var(--purple);
             border: none;
-            border-radius: 20px;
-            color: #fff;
+            border-radius: 24px;
+            color: white;
             cursor: pointer;
-            font-weight: 500;
         }
 
         .search-results {
@@ -187,67 +191,75 @@
 
         .search-result-item {
             padding: 10px;
-            background: #242f3d;
-            border-radius: 12px;
+            background: var(--gray-light);
+            border-radius: 16px;
             margin-bottom: 8px;
             cursor: pointer;
             transition: background 0.2s;
         }
 
         .search-result-item:hover {
-            background: #2b5278;
+            background: var(--lavender);
         }
 
         .section-title {
             font-size: 12px;
             font-weight: 600;
-            color: #6c7883;
-            letter-spacing: 0.5px;
-            padding: 16px 16px 8px 16px;
+            color: var(--purple);
+            letter-spacing: 1px;
+            padding: 20px 16px 8px 16px;
         }
 
         .contacts-list, .chats-list {
-            padding: 0 8px;
+            padding: 0 12px;
         }
 
         .contact-item, .chat-item {
             padding: 12px;
-            border-radius: 12px;
+            border-radius: 16px;
             cursor: pointer;
-            margin-bottom: 4px;
-            transition: background 0.2s;
+            margin-bottom: 6px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         .contact-item:hover, .chat-item:hover {
-            background: #242f3d;
+            background: var(--lavender-light);
         }
 
         .contact-item.active, .chat-item.active {
-            background: #2b5278;
+            background: var(--lavender);
         }
 
         .chat-area {
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: #0e1621;
+            background: var(--white);
         }
 
         .chat-header {
-            padding: 16px 20px;
-            background: #17212b;
-            border-bottom: 1px solid #2b2f36;
+            padding: 20px 24px;
+            background: var(--white);
+            border-bottom: 1px solid var(--lavender);
             font-weight: 600;
             font-size: 18px;
+            color: var(--purple-dark);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .messages-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 24px;
             display: flex;
             flex-direction: column;
             gap: 12px;
+            background: #fefefe;
         }
 
         .message {
@@ -262,58 +274,87 @@
         }
 
         .message-bubble {
-            background: #242f3d;
-            padding: 10px 14px;
-            border-radius: 18px;
+            background: var(--lavender-light);
+            padding: 12px 16px;
+            border-radius: 20px;
             word-break: break-word;
+            max-width: 100%;
         }
 
         .message-mine .message-bubble {
-            background: #2b5278;
+            background: var(--lavender);
         }
 
         .message-text {
-            font-size: 14px;
-            line-height: 1.4;
+            font-size: 15px;
+            color: var(--text-dark);
         }
 
         .message-time {
             font-size: 10px;
-            color: #6c7883;
-            margin-top: 4px;
+            color: var(--text-light);
+            margin-top: 6px;
             text-align: right;
         }
 
+        /* Панель ввода с кнопками */
         .input-area {
             padding: 16px 20px;
-            background: #17212b;
+            background: var(--white);
+            border-top: 1px solid var(--lavender);
             display: flex;
             gap: 12px;
-            border-top: 1px solid #2b2f36;
+            align-items: center;
+            flex-wrap: wrap;
         }
 
         .input-area input {
             flex: 1;
             padding: 12px 16px;
-            background: #242f3d;
-            border: none;
-            border-radius: 24px;
-            color: #fff;
+            background: var(--gray-light);
+            border: 1px solid var(--gray);
+            border-radius: 28px;
             font-size: 15px;
         }
 
         .input-area input:focus {
             outline: none;
+            border-color: var(--purple);
         }
 
         .input-area button {
             padding: 12px 24px;
-            background: #2b5278;
+            background: var(--purple);
             border: none;
-            border-radius: 24px;
-            color: #fff;
+            border-radius: 28px;
+            color: white;
             font-weight: 600;
             cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .input-area button:hover {
+            background: var(--purple-dark);
+        }
+
+        .icon-btn {
+            background: var(--lavender-light);
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: var(--lavender);
+            transform: scale(1.05);
+        }
+
+        .file-input {
+            display: none;
         }
 
         .empty-state {
@@ -321,44 +362,63 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #6c7883;
+            color: var(--text-light);
             text-align: center;
-            padding: 20px;
+            flex-direction: column;
+            gap: 16px;
         }
 
-        .loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            font-size: 18px;
-            color: #6c7883;
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--purple-dark);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 40px;
+            font-size: 14px;
+            z-index: 1000;
+            animation: fadeInUp 0.3s ease;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
         }
 
         @media (max-width: 768px) {
             .sidebar {
-                position: absolute;
+                position: fixed;
                 left: -280px;
                 transition: left 0.3s;
-                z-index: 10;
+                z-index: 100;
                 height: 100%;
                 width: 280px;
             }
             .sidebar.open {
                 left: 0;
             }
+            .message {
+                max-width: 85%;
+            }
         }
     </style>
 </head>
 <body>
-<div id="root" class="loading">Загрузка Noris...</div>
+<div id="root" class="auth-container"><div class="auth-card"><h1>✨ Noris</h1><div class="sub">Загрузка...</div></div></div>
 
 <script>
     // ==================== НАСТРОЙКИ ====================
     const API_BASE = 'https://noris.onrender.com/api';
     const SOCKET_URL = 'https://noris.onrender.com';
     
-    // ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
     let token = localStorage.getItem('token');
     let currentUser = null;
     let socket = null;
@@ -366,11 +426,16 @@
     let messages = [];
     let contacts = [];
     let chats = [];
-    let pendingUserId = null; // для хранения userId после регистрации
+    let pendingUserId = null;
 
-    // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
-    function showError(msg) {
-        alert('❌ ' + msg);
+    // ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
+    function showToast(msg, isError = false) {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = msg;
+        if (isError) toast.style.background = '#e74c3c';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
     }
 
     async function apiRequest(endpoint, options = {}) {
@@ -379,39 +444,32 @@
                 'Content-Type': 'application/json',
                 ...options.headers
             };
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-            const response = await fetch(API_BASE + endpoint, {
-                ...options,
-                headers
-            });
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const response = await fetch(API_BASE + endpoint, { ...options, headers });
             const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.error || 'Ошибка запроса');
-            }
+            if (!response.ok) throw new Error(data.error || 'Ошибка');
             return data;
         } catch (error) {
-            console.error('API Error:', error);
+            showToast(error.message, true);
             throw error;
         }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
     }
 
     // ==================== SOCKET ====================
     function initSocket() {
         if (socket) socket.close();
         if (!token) return;
-        
-        socket = io(SOCKET_URL, {
-            auth: { token },
-            transports: ['websocket'],
-            reconnection: true
-        });
-        
-        socket.on('connect', () => {
-            console.log('🔌 Socket connected');
-        });
-        
+        socket = io(SOCKET_URL, { auth: { token }, transports: ['websocket'] });
         socket.on('new_message', (msg) => {
             if (activeChat && (msg.chatId === activeChat.id || msg.senderId === activeChat.id)) {
                 messages.push(msg);
@@ -419,70 +477,41 @@
             }
             loadChats();
         });
-        
-        socket.on('disconnect', () => {
-            console.log('🔌 Socket disconnected');
-        });
     }
 
     // ==================== ЗАГРУЗКА ДАННЫХ ====================
     async function loadUser() {
         try {
             const data = await apiRequest('/users/me');
-            if (data.user) {
-                currentUser = data.user;
-                return true;
-            }
+            if (data.user) { currentUser = data.user; return true; }
             return false;
-        } catch (error) {
-            return false;
-        }
+        } catch { return false; }
     }
 
     async function loadContacts() {
-        try {
-            const data = await apiRequest('/users/contacts');
-            contacts = Array.isArray(data) ? data : [];
-            renderContacts();
-        } catch (error) {
-            contacts = [];
-            renderContacts();
-        }
+        try { contacts = await apiRequest('/users/contacts'); renderContacts(); } 
+        catch { contacts = []; renderContacts(); }
     }
 
     async function loadChats() {
-        try {
-            const data = await apiRequest('/chats');
-            chats = Array.isArray(data) ? data : [];
-            renderChats();
-        } catch (error) {
-            chats = [];
-            renderChats();
-        }
+        try { chats = await apiRequest('/chats'); renderChats(); } 
+        catch { chats = []; renderChats(); }
     }
 
     async function loadMessages(chatId) {
-        try {
-            const data = await apiRequest('/messages/' + chatId);
-            messages = Array.isArray(data) ? data : [];
-            renderMessages();
-        } catch (error) {
-            messages = [];
-            renderMessages();
-        }
+        try { messages = await apiRequest('/messages/' + chatId); renderMessages(); } 
+        catch { messages = []; renderMessages(); }
     }
 
     // ==================== ОТРИСОВКА ====================
     function renderContacts() {
         const container = document.getElementById('contactsList');
         if (!container) return;
-        if (!contacts.length) {
-            container.innerHTML = '<div style="color:#6c7883; padding:12px;">Нет контактов</div>';
-            return;
-        }
+        if (!contacts.length) { container.innerHTML = '<div style="color:#aaa; padding:12px;">Нет контактов</div>'; return; }
         container.innerHTML = contacts.map(c => `
             <div class="contact-item" onclick="openChat({id:'${c.id}', name:'${escapeHtml(c.firstName + ' ' + c.lastName || c.username)}', type:'user'})">
-                ${escapeHtml(c.firstName || '')} ${escapeHtml(c.lastName || '')} (@${escapeHtml(c.username)})
+                <i class="fas fa-user-circle" style="font-size:28px; color:var(--purple);"></i>
+                <div><strong>${escapeHtml(c.firstName || '')} ${escapeHtml(c.lastName || '')}</strong><br><small>@${escapeHtml(c.username)}</small></div>
             </div>
         `).join('');
     }
@@ -490,13 +519,11 @@
     function renderChats() {
         const container = document.getElementById('chatsList');
         if (!container) return;
-        if (!chats.length) {
-            container.innerHTML = '<div style="color:#6c7883; padding:12px;">Нет чатов</div>';
-            return;
-        }
+        if (!chats.length) { container.innerHTML = '<div style="color:#aaa; padding:12px;">Нет чатов</div>'; return; }
         container.innerHTML = chats.map(chat => `
             <div class="chat-item ${activeChat?.id === chat.id ? 'active' : ''}" onclick="openChat({id:'${chat.id}', name:'${escapeHtml(chat.name)}', type:'${chat.type || 'user'}'})">
-                ${escapeHtml(chat.name)}
+                <i class="fas fa-comment-dots" style="font-size:22px; color:var(--purple);"></i>
+                <div><strong>${escapeHtml(chat.name)}</strong></div>
             </div>
         `).join('');
     }
@@ -504,10 +531,7 @@
     function renderMessages() {
         const container = document.getElementById('messagesContainer');
         if (!container) return;
-        if (!messages.length) {
-            container.innerHTML = '<div class="empty-state">✉️ Нет сообщений<br>Напишите что-нибудь</div>';
-            return;
-        }
+        if (!messages.length) { container.innerHTML = '<div class="empty-state"><i class="fas fa-comments" style="font-size:48px; color:var(--lavender);"></i><p>Нет сообщений. Напишите что-нибудь!</p></div>'; return; }
         container.innerHTML = messages.map(msg => {
             const isMine = msg.senderId === currentUser?.id;
             return `
@@ -522,24 +546,12 @@
         container.scrollTop = container.scrollHeight;
     }
 
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
-    }
-
-    // ==================== ДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЯ ====================
+    // ==================== ДЕЙСТВИЯ ====================
     window.openChat = function(chat) {
         activeChat = chat;
         loadMessages(chat.id);
         renderChats();
-        if (socket) {
-            socket.emit('join_group', chat.id);
-        }
+        if (socket) socket.emit('join_group', chat.id);
     };
 
     window.sendMessage = async function() {
@@ -555,64 +567,78 @@
         input.value = '';
     };
 
+    // Отправка файла (изображения, видео, аудио)
+    window.sendFile = function() {
+        document.getElementById('fileInput').click();
+    };
+
+    window.handleFile = async function(e) {
+        const file = e.target.files[0];
+        if (!file || !activeChat || !socket) return;
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const response = await fetch(API_BASE + '/upload', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            const data = await response.json();
+            if (data.url) {
+                socket.emit('send_message', {
+                    chatId: activeChat.id,
+                    content: `📎 ${file.name}: ${data.url}`,
+                    type: 'file',
+                    receiverId: activeChat.type === 'user' ? activeChat.id : null,
+                    fileUrl: data.url,
+                    fileName: file.name
+                });
+            }
+        } catch (error) {
+            showToast('Ошибка загрузки файла', true);
+        }
+        e.target.value = '';
+    };
+
     window.searchUsers = async function() {
         const query = document.getElementById('searchInput')?.value;
         if (!query) return;
         try {
             const users = await apiRequest('/users/search?q=' + encodeURIComponent(query));
             const resultsDiv = document.getElementById('searchResults');
-            if (resultsDiv) {
-                if (!users.length) {
-                    resultsDiv.innerHTML = '<div style="padding:8px; color:#6c7883;">Ничего не найдено</div>';
-                    return;
-                }
-                resultsDiv.innerHTML = users.map(u => `
-                    <div class="search-result-item" onclick="addContact('${u.id}')">
-                        @${escapeHtml(u.username)} — ${escapeHtml(u.firstName)} ${escapeHtml(u.lastName)}
-                    </div>
-                `).join('');
-            }
-        } catch (error) {
-            showError('Ошибка поиска');
-        }
+            if (!users.length) { resultsDiv.innerHTML = '<div style="padding:8px; color:#aaa;">Ничего не найдено</div>'; return; }
+            resultsDiv.innerHTML = users.map(u => `
+                <div class="search-result-item" onclick="addContact('${u.id}')">
+                    <i class="fas fa-user-plus"></i> @${escapeHtml(u.username)} — ${escapeHtml(u.firstName)} ${escapeHtml(u.lastName)}
+                </div>
+            `).join('');
+        } catch { showToast('Ошибка поиска', true); }
     };
 
     window.addContact = async function(contactId) {
         try {
             await apiRequest('/users/contact', { method: 'POST', body: JSON.stringify({ contactId }) });
-            alert('✅ Контакт добавлен');
-            loadContacts();
-            loadChats();
-        } catch (error) {
-            showError('Не удалось добавить контакт');
-        }
+            showToast('✅ Контакт добавлен');
+            loadContacts(); loadChats();
+        } catch { showToast('Не удалось добавить контакт', true); }
     };
 
     // ==================== АУТЕНТИФИКАЦИЯ ====================
     window.doLogin = async function() {
         const email = document.getElementById('loginEmail')?.value;
         const password = document.getElementById('loginPassword')?.value;
-        if (!email || !password) {
-            showError('Введите email и пароль');
-            return;
-        }
+        if (!email || !password) { showToast('Введите email и пароль', true); return; }
         try {
-            const data = await apiRequest('/auth/login', {
-                method: 'POST',
-                body: JSON.stringify({ email, password })
-            });
+            const data = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
             if (data.token) {
-                token = data.token;
-                localStorage.setItem('token', token);
+                token = data.token; localStorage.setItem('token', token);
                 currentUser = data.user;
                 initSocket();
                 showMainApp();
-            } else {
-                showError(data.error || 'Ошибка входа');
+                showToast('Добро пожаловать, ' + currentUser.firstName + '!');
             }
-        } catch (error) {
-            showError(error.message || 'Ошибка входа');
-        }
+        } catch { showToast('Ошибка входа', true); }
     };
 
     window.doRegister = async function() {
@@ -621,64 +647,39 @@
         const firstName = document.getElementById('regFirstName')?.value;
         const lastName = document.getElementById('regLastName')?.value;
         const username = document.getElementById('regUsername')?.value;
-        
-        if (!email || !password || !firstName || !lastName || !username) {
-            showError('Заполните все поля');
-            return;
-        }
-        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-            showError('Никнейм только латиница, цифры, _');
-            return;
-        }
+        if (!email || !password || !firstName || !lastName || !username) { showToast('Заполните все поля', true); return; }
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) { showToast('Никнейм только латиница, цифры, _', true); return; }
         try {
-            const data = await apiRequest('/auth/register', {
-                method: 'POST',
-                body: JSON.stringify({ email, password, firstName, lastName, username })
-            });
+            const data = await apiRequest('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, firstName, lastName, username }) });
             if (data.userId) {
                 pendingUserId = data.userId;
-                showVerifyScreen(data.userId);
-                alert('✅ Код отправлен на email! Ссылка на письмо в логах Render.');
-            } else {
-                showError(data.error || 'Ошибка регистрации');
+                showToast('✅ Аккаунт зарегистрирован! Теперь войдите.');
+                showLoginScreen();
             }
-        } catch (error) {
-            showError(error.message || 'Ошибка регистрации');
-        }
+        } catch { showToast('Ошибка регистрации', true); }
     };
 
     window.doVerify = async function() {
         const code = document.getElementById('verifyCode')?.value;
-        if (!code || !pendingUserId) {
-            showError('Введите код');
-            return;
-        }
+        if (!code || !pendingUserId) { showToast('Введите код', true); return; }
         try {
-            const data = await apiRequest('/auth/verify', {
-                method: 'POST',
-                body: JSON.stringify({ userId: pendingUserId, code })
-            });
+            const data = await apiRequest('/auth/verify', { method: 'POST', body: JSON.stringify({ userId: pendingUserId, code }) });
             if (data.token) {
-                token = data.token;
-                localStorage.setItem('token', token);
-                currentUser = data.user;
-                pendingUserId = null;
+                token = data.token; localStorage.setItem('token', token);
+                currentUser = data.user; pendingUserId = null;
                 initSocket();
                 showMainApp();
-            } else {
-                showError(data.error || 'Неверный код');
+                showToast('Добро пожаловать в Noris!');
             }
-        } catch (error) {
-            showError('Ошибка подтверждения');
-        }
+        } catch { showToast('Неверный код', true); }
     };
 
     window.logout = function() {
         localStorage.removeItem('token');
-        token = null;
-        currentUser = null;
+        token = null; currentUser = null;
         if (socket) socket.close();
         showLoginScreen();
+        showToast('Вы вышли из аккаунта');
     };
 
     // ==================== ЭКРАНЫ ====================
@@ -687,7 +688,7 @@
             <div class="auth-container">
                 <div class="auth-card">
                     <h1>✨ Noris</h1>
-                    <div class="sub">Новый уровень общения</div>
+                    <div class="sub">Лавандовый рай общения</div>
                     <input type="email" id="loginEmail" placeholder="Email">
                     <input type="password" id="loginPassword" placeholder="Пароль">
                     <button onclick="doLogin()">Войти</button>
@@ -702,7 +703,7 @@
             <div class="auth-container">
                 <div class="auth-card">
                     <h1>Регистрация</h1>
-                    <div class="sub">Добро пожаловать в Noris</div>
+                    <div class="sub">Присоединяйся к Noris</div>
                     <input type="email" id="regEmail" placeholder="Email">
                     <input type="password" id="regPassword" placeholder="Пароль (мин 6)">
                     <input type="text" id="regFirstName" placeholder="Имя">
@@ -715,72 +716,53 @@
         `;
     }
 
-    function showVerifyScreen(userId) {
-        document.getElementById('root').innerHTML = `
-            <div class="auth-container">
-                <div class="auth-card">
-                    <h1>Подтверждение</h1>
-                    <div class="sub">Введите код из письма</div>
-                    <input type="text" id="verifyCode" placeholder="Код из 6 цифр">
-                    <button onclick="doVerify()">Подтвердить</button>
-                    <button class="secondary-btn" onclick="showLoginScreen()">Назад</button>
-                </div>
-            </div>
-        `;
-    }
-
     async function showMainApp() {
         if (!currentUser) {
             const ok = await loadUser();
-            if (!ok) {
-                showLoginScreen();
-                return;
-            }
+            if (!ok) { showLoginScreen(); return; }
         }
-        
         document.getElementById('root').innerHTML = `
             <div class="app">
                 <div class="sidebar" id="sidebar">
                     <div class="profile">
-                        <img src="${currentUser?.avatar || 'https://ui-avatars.com/api/?name='+(currentUser?.firstName || '')+'+'+(currentUser?.lastName || '')+'&background=2b5278&color=fff'}" alt="">
+                        <img src="${currentUser?.avatar || 'https://ui-avatars.com/api/?name='+(currentUser?.firstName || '')+'+'+(currentUser?.lastName || '')+'&background=9b59b6&color=fff'}" alt="">
                         <div class="profile-info">
                             <div class="profile-name">${escapeHtml(currentUser?.firstName || '')} ${escapeHtml(currentUser?.lastName || '')}</div>
                             <div class="profile-username">@${escapeHtml(currentUser?.username || '')}</div>
                         </div>
-                        <button onclick="logout()" style="background:none; border:none; color:#6c7883; cursor:pointer; font-size:20px;">🚪</button>
+                        <button onclick="logout()" style="background:none; border:none; font-size:24px; cursor:pointer;">🚪</button>
                     </div>
                     <div class="search-section">
                         <div class="search-box">
                             <input type="text" id="searchInput" placeholder="Поиск по никнейму...">
-                            <button onclick="searchUsers()">Найти</button>
+                            <button onclick="searchUsers()"><i class="fas fa-search"></i></button>
                         </div>
                         <div id="searchResults" class="search-results"></div>
                     </div>
-                    <div class="section-title">КОНТАКТЫ</div>
+                    <div class="section-title"><i class="fas fa-address-book"></i> КОНТАКТЫ</div>
                     <div id="contactsList" class="contacts-list"></div>
-                    <div class="section-title">ЧАТЫ</div>
+                    <div class="section-title"><i class="fas fa-comments"></i> ЧАТЫ</div>
                     <div id="chatsList" class="chats-list"></div>
                 </div>
                 <div class="chat-area">
                     <div class="chat-header">
-                        ${activeChat ? escapeHtml(activeChat.name) : 'Noris Messenger'}
+                        <span>${activeChat ? escapeHtml(activeChat.name) : 'Noris Messenger'}</span>
+                        <i class="fas fa-phone-alt" style="color:var(--purple); cursor:pointer;" onclick="showToast('Голосовые вызовы скоро')"></i>
                     </div>
-                    <div id="messagesContainer" class="messages-container">
-                        <div class="empty-state">Выберите чат</div>
-                    </div>
+                    <div id="messagesContainer" class="messages-container"></div>
                     <div class="input-area">
+                        <button class="icon-btn" onclick="sendFile()"><i class="fas fa-paperclip"></i></button>
+                        <button class="icon-btn" onclick="showToast('Голосовые сообщения скоро')"><i class="fas fa-microphone"></i></button>
                         <input type="text" id="messageInput" placeholder="Сообщение..." onkeypress="if(event.key==='Enter') sendMessage()">
-                        <button onclick="sendMessage()">Отправить</button>
+                        <button onclick="sendMessage()"><i class="fas fa-paper-plane"></i> Отправить</button>
+                        <input type="file" id="fileInput" class="file-input" onchange="handleFile(event)">
                     </div>
                 </div>
             </div>
         `;
-        
         await loadContacts();
         await loadChats();
-        if (activeChat) {
-            await loadMessages(activeChat.id);
-        }
+        if (activeChat) await loadMessages(activeChat.id);
     }
 
     // ==================== СТАРТ ====================
@@ -795,7 +777,6 @@
         }
         showLoginScreen();
     }
-
     init();
 </script>
 </body>
