@@ -14,26 +14,16 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [chats, setChats] = useState([]);
-  const [groups, setGroups] = useState([]);
-  const [channels, setChannels] = useState([]);
-  const [stickerPacks, setStickerPacks] = useState([]);
-  const [showStickers, setShowStickers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [messageText, setMessageText] = useState('');
   const [typing, setTyping] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [videoRecording, setVideoRecording] = useState(false);
-  const [authMode, setAuthMode] = useState('login'); // login, register
+  const [authMode, setAuthMode] = useState('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authFirstName, setAuthFirstName] = useState('');
   const [authLastName, setAuthLastName] = useState('');
   const [authUsername, setAuthUsername] = useState('');
-
-  const mediaRecorderRef = useRef(null);
-  const videoRecorderRef = useRef(null);
-  const videoPreviewRef = useRef(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -42,21 +32,14 @@ function App() {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
 
-  // Загрузка пользователя
   useEffect(() => {
-    if (token) {
-      fetchUser();
-    }
+    if (token) fetchUser();
   }, [token]);
 
-  // Подключение к чату
   useEffect(() => {
-    if (socket && activeChat) {
-      socket.emit('join_chat', activeChat.id);
-    }
+    if (socket && activeChat) socket.emit('join_chat', activeChat.id);
   }, [socket, activeChat]);
 
-  // Скролл к последнему сообщению
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -66,7 +49,8 @@ function App() {
       const { data } = await api.get('/users/me');
       setUser(data.user);
       initSocket();
-      loadData();
+      loadChats();
+      loadContacts();
     } catch {
       localStorage.removeItem('token');
       setToken(null);
@@ -81,18 +65,12 @@ function App() {
         setMessages(prev => [...prev, msg]);
       }
       loadChats();
-      if (msg.senderId !== user?.id) {
-        toast(`📩 Новое сообщение`);
-      }
+      if (msg.senderId !== user?.id) toast('📩 Новое сообщение');
     });
-    newSocket.on('user_typing', ({ userId, chatId }) => {
-      if (activeChat?.id === chatId || activeChat?.id === userId) setTyping(true);
+    newSocket.on('user_typing', ({ chatId }) => {
+      if (activeChat?.id === chatId) setTyping(true);
       setTimeout(() => setTyping(false), 2000);
     });
-  };
-
-  const loadData = async () => {
-    await Promise.all([loadContacts(), loadChats(), loadGroups(), loadChannels(), loadStickerPacks()]);
   };
 
   const loadContacts = async () => {
@@ -109,27 +87,6 @@ function App() {
     } catch (e) {}
   };
 
-  const loadGroups = async () => {
-    try {
-      const { data } = await api.get('/groups');
-      setGroups(data);
-    } catch (e) {}
-  };
-
-  const loadChannels = async () => {
-    try {
-      const { data } = await api.get('/channels');
-      setChannels(data);
-    } catch (e) {}
-  };
-
-  const loadStickerPacks = async () => {
-    try {
-      const { data } = await api.get('/sticker-packs');
-      setStickerPacks(data);
-    } catch (e) {}
-  };
-
   const loadMessages = async (chatId) => {
     try {
       const { data } = await api.get(`/messages/${chatId}`);
@@ -137,104 +94,37 @@ function App() {
     } catch (e) {}
   };
 
-  const sendMessage = async (content, type = 'text', fileUrl = null, fileName = null, isSticker = false) => {
-    if (!content && !fileUrl) return;
-    if (!socket || !activeChat) return;
+  const sendMessage = async (content) => {
+    if (!content || !socket || !activeChat) return;
     socket.emit('send_message', {
       chatId: activeChat.id,
-      content: content || (fileUrl ? (isSticker ? '🎨 Стикер' : `📎 ${fileName}`) : ''),
-      type,
-      receiverId: activeChat.type === 'user' ? activeChat.id : null,
-      fileUrl,
-      fileName,
-      isSticker
+      content,
+      type: 'text',
+      receiverId: activeChat.type === 'user' ? activeChat.id : null
     });
     setMessageText('');
   };
 
-  const handleFileUpload = async (e, type = 'file') => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const formData = new FormData();
     formData.append('file', file);
-    try {
-      const { data } = await api.post('/upload', formData);
-      sendMessage(data.url, type, data.url, file.name);
-    } catch (err) {
-      toast.error('Ошибка загрузки');
-    }
-  };
-
-  // Голосовые сообщения
-  const startVoiceRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      const chunks = [];
-      mediaRecorder.ondataavailable = e => chunks.push(e.data);
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const formData = new FormData();
-        formData.append('file', blob, 'voice.webm');
-        const { data } = await api.post('/upload', formData);
-        sendMessage(data.url, 'voice', data.url, 'Голосовое');
-        stream.getTracks().forEach(track => track.stop());
-      };
-      mediaRecorder.start();
-      setRecording(true);
-      toast('🎙 Запись... Отпустите для отправки');
-    } catch {
-      toast.error('Нет доступа к микрофону');
-    }
-  };
-
-  const stopVoiceRecording = () => {
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-    }
-  };
-
-  // Видеосообщения
-  const startVideoRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (videoPreviewRef.current) videoPreviewRef.current.srcObject = stream;
-      const mediaRecorder = new MediaRecorder(stream);
-      videoRecorderRef.current = mediaRecorder;
-      const chunks = [];
-      mediaRecorder.ondataavailable = e => chunks.push(e.data);
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'video/mp4' });
-        const formData = new FormData();
-        formData.append('file', blob, 'video.mp4');
-        const { data } = await api.post('/upload', formData);
-        sendMessage(data.url, 'video', data.url, 'Видео');
-        stream.getTracks().forEach(track => track.stop());
-        if (videoPreviewRef.current) videoPreviewRef.current.srcObject = null;
-      };
-      mediaRecorder.start();
-      setVideoRecording(true);
-      toast('🎥 Запись видео... Отпустите для отправки');
-    } catch {
-      toast.error('Нет доступа к камере');
-    }
-  };
-
-  const stopVideoRecording = () => {
-    if (videoRecorderRef.current && videoRecording) {
-      videoRecorderRef.current.stop();
-      setVideoRecording(false);
-    }
+    const { data } = await api.post('/upload', formData);
+    socket.emit('send_message', {
+      chatId: activeChat.id,
+      content: `📎 ${file.name}: ${data.url}`,
+      type: 'file',
+      receiverId: activeChat.type === 'user' ? activeChat.id : null,
+      fileUrl: data.url,
+      fileName: file.name
+    });
   };
 
   const searchUsers = async () => {
     if (!searchQuery) return;
-    try {
-      const { data } = await api.get(`/users/search?q=${searchQuery}`);
-      setSearchResults(data);
-    } catch (e) {}
+    const { data } = await api.get(`/users/search?q=${searchQuery}`);
+    setSearchResults(data);
   };
 
   const addContact = async (contactId) => {
@@ -244,76 +134,21 @@ function App() {
     loadChats();
   };
 
-  const createGroup = async () => {
-    const name = prompt('Название группы:');
-    if (!name) return;
-    const { data } = await api.post('/groups', { name });
-    toast.success('Группа создана');
-    loadChats();
-    openChat({ id: data.id, name, type: 'group' });
-  };
-
-  const createChannel = async () => {
-    const name = prompt('Название канала:');
-    const username = prompt('Уникальный username канала (латиница):');
-    if (!name || !username) return;
-    const { data } = await api.post('/channels', { name, username, isPublic: true });
-    toast.success('Канал создан');
-    loadChats();
-  };
-
-  const joinChannel = async (channelId) => {
-    await api.post(`/channels/${channelId}/join`);
-    toast.success('Вы подписались');
-    loadChats();
-  };
-
-  const createStickerPack = async () => {
-    const name = prompt('Название стикерпака:');
-    if (!name) return;
-    const { data } = await api.post('/sticker-packs', { name });
-    toast.success('Стикерпак создан');
-    loadStickerPacks();
-  };
-
-  const addStickerToPack = async (packId) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      const formData = new FormData();
-      formData.append('sticker', file);
-      await api.post(`/sticker-packs/${packId}/add-sticker`, formData);
-      toast.success('Стикер добавлен');
-      loadStickerPacks();
-    };
-    input.click();
-  };
-
-  const addStickerPack = async (inviteLink) => {
-    await api.post(`/sticker-packs/${inviteLink}/add`);
-    toast.success('Стикерпак добавлен');
-    loadStickerPacks();
-  };
-
   const openChat = async (chat) => {
     setActiveChat(chat);
     await loadMessages(chat.id);
     if (socket) socket.emit('join_chat', chat.id);
-    setShowStickers(false);
   };
 
   const handleLogin = async () => {
     try {
       const { data } = await axios.post(API_URL + '/auth/login', { email: authEmail, password: authPassword });
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-        setToken(data.token);
-        setUser(data.user);
-        initSocket();
-        loadData();
-      }
+      localStorage.setItem('token', data.token);
+      setToken(data.token);
+      setUser(data.user);
+      initSocket();
+      loadChats();
+      loadContacts();
     } catch {
       toast.error('Ошибка входа');
     }
@@ -335,15 +170,6 @@ function App() {
     }
   };
 
-  const renderMessage = (msg) => {
-    if (msg.type === 'voice') return <audio controls src={msg.fileUrl} style={{ maxWidth: '200px' }} />;
-    if (msg.type === 'video') return <video controls src={msg.fileUrl} style={{ maxWidth: '250px', borderRadius: '12px' }} />;
-    if (msg.type === 'file') return <a href={msg.fileUrl} target="_blank" rel="noreferrer">📎 {msg.fileName || 'Файл'}</a>;
-    if (msg.isSticker) return <img src={msg.fileUrl} alt="sticker" style={{ maxWidth: '120px', maxHeight: '120px' }} />;
-    return msg.content;
-  };
-
-  // Экран авторизации
   if (!user) {
     return (
       <div className="auth-container">
@@ -372,7 +198,6 @@ function App() {
     );
   }
 
-  // Основной интерфейс
   return (
     <div className="app">
       <Toaster position="top-right" />
@@ -406,21 +231,11 @@ function App() {
             <span>{chat.name}</span>
           </div>
         ))}
-        <div className="section">👥 ГРУППЫ</div>
-        {groups.map(g => (
-          <div key={g.id} className="chat-item" onClick={() => openChat({ id: g.id, name: g.name, type: 'group' })}>👥 {g.name}</div>
-        ))}
-        <div className="section">📢 КАНАЛЫ</div>
-        {channels.map(c => (
-          <div key={c.id} className="chat-item" onClick={() => openChat({ id: c.id, name: c.name, type: 'channel' })}>📢 {c.name}</div>
-        ))}
         <div className="actions">
-          <button onClick={createGroup}>+ Группа</button>
-          <button onClick={createChannel}>+ Канал</button>
-          <button onClick={createStickerPack}>+ Стикерпак</button>
+          <button onClick={() => alert('Группы и каналы будут добавлены в следующем обновлении')}>+ Группа</button>
+          <button onClick={() => alert('Стикеры скоро')}>+ Стикерпак</button>
         </div>
       </div>
-
       <div className="chat-area">
         {activeChat ? (
           <>
@@ -432,7 +247,7 @@ function App() {
               {messages.map(msg => (
                 <div key={msg.id} className={`message ${msg.senderId === user.id ? 'mine' : 'theirs'}`}>
                   <div className="bubble">
-                    {renderMessage(msg)}
+                    {msg.type === 'file' ? <a href={msg.fileUrl} target="_blank" rel="noreferrer">📎 {msg.fileName || 'Файл'}</a> : msg.content}
                     <div className="time">{new Date(msg.createdAt).toLocaleTimeString()}</div>
                   </div>
                 </div>
@@ -442,31 +257,16 @@ function App() {
             <div className="input-area">
               <button className="icon" onClick={() => fileInputRef.current.click()}>📎</button>
               <input ref={fileInputRef} type="file" hidden onChange={handleFileUpload} />
-              <button className="icon" onMouseDown={startVoiceRecording} onMouseUp={stopVoiceRecording} onTouchStart={startVoiceRecording} onTouchEnd={stopVoiceRecording}>🎙</button>
-              <button className="icon" onMouseDown={startVideoRecording} onMouseUp={stopVideoRecording} onTouchStart={startVideoRecording} onTouchEnd={stopVideoRecording}>📹</button>
-              <button className="icon" onClick={() => setShowStickers(!showStickers)}>😊</button>
               <input value={messageText} onChange={e => setMessageText(e.target.value)} onKeyPress={e => e.key === 'Enter' && sendMessage(messageText)} placeholder="Сообщение" />
               <button className="send" onClick={() => sendMessage(messageText)}>➤</button>
             </div>
-            {showStickers && (
-              <div className="sticker-panel">
-                {stickerPacks.map(pack => (
-                  <div key={pack.id} className="sticker-pack">
-                    <div className="pack-name">{pack.name}</div>
-                    <button onClick={() => addStickerToPack(pack.id)}>+ Стикер</button>
-                  </div>
-                ))}
-                <button onClick={() => addStickerPack(prompt('Введите ID стикерпака:'))}>➕ Добавить стикерпак</button>
-              </div>
-            )}
           </>
         ) : (
           <div className="empty">✨ Выберите чат, чтобы начать общение</div>
         )}
       </div>
-      {videoRecording && <video ref={videoPreviewRef} autoPlay muted style={{ position: 'fixed', bottom: 100, right: 20, width: 120, borderRadius: 60, border: '2px solid #9b59b6' }} />}
     </div>
   );
 }
 
-export default App;
+export default App;ault App;
