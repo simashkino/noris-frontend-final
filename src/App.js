@@ -24,6 +24,13 @@ function App() {
   const [typing, setTyping] = useState(false);
   const [recording, setRecording] = useState(false);
   const [videoRecording, setVideoRecording] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // login, register
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authFirstName, setAuthFirstName] = useState('');
+  const [authLastName, setAuthLastName] = useState('');
+  const [authUsername, setAuthUsername] = useState('');
+
   const mediaRecorderRef = useRef(null);
   const videoRecorderRef = useRef(null);
   const videoPreviewRef = useRef(null);
@@ -35,20 +42,21 @@ function App() {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
 
+  // Загрузка пользователя
   useEffect(() => {
     if (token) {
       fetchUser();
-    } else {
-      showLogin();
     }
   }, [token]);
 
+  // Подключение к чату
   useEffect(() => {
     if (socket && activeChat) {
       socket.emit('join_chat', activeChat.id);
     }
   }, [socket, activeChat]);
 
+  // Скролл к последнему сообщению
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -62,7 +70,6 @@ function App() {
     } catch {
       localStorage.removeItem('token');
       setToken(null);
-      showLogin();
     }
   };
 
@@ -75,7 +82,7 @@ function App() {
       }
       loadChats();
       if (msg.senderId !== user?.id) {
-        toast(`📩 Новое сообщение от ${msg.senderId}`);
+        toast(`📩 Новое сообщение`);
       }
     });
     newSocket.on('user_typing', ({ userId, chatId }) => {
@@ -89,37 +96,50 @@ function App() {
   };
 
   const loadContacts = async () => {
-    const { data } = await api.get('/users/contacts');
-    setContacts(data);
+    try {
+      const { data } = await api.get('/users/contacts');
+      setContacts(data);
+    } catch (e) {}
   };
 
   const loadChats = async () => {
-    const { data } = await api.get('/chats');
-    setChats(data);
+    try {
+      const { data } = await api.get('/chats');
+      setChats(data);
+    } catch (e) {}
   };
 
   const loadGroups = async () => {
-    const { data } = await api.get('/groups');
-    setGroups(data);
+    try {
+      const { data } = await api.get('/groups');
+      setGroups(data);
+    } catch (e) {}
   };
 
   const loadChannels = async () => {
-    const { data } = await api.get('/channels');
-    setChannels(data);
+    try {
+      const { data } = await api.get('/channels');
+      setChannels(data);
+    } catch (e) {}
   };
 
   const loadStickerPacks = async () => {
-    const { data } = await api.get('/sticker-packs');
-    setStickerPacks(data);
+    try {
+      const { data } = await api.get('/sticker-packs');
+      setStickerPacks(data);
+    } catch (e) {}
   };
 
   const loadMessages = async (chatId) => {
-    const { data } = await api.get(`/messages/${chatId}`);
-    setMessages(data);
+    try {
+      const { data } = await api.get(`/messages/${chatId}`);
+      setMessages(data);
+    } catch (e) {}
   };
 
   const sendMessage = async (content, type = 'text', fileUrl = null, fileName = null, isSticker = false) => {
     if (!content && !fileUrl) return;
+    if (!socket || !activeChat) return;
     socket.emit('send_message', {
       chatId: activeChat.id,
       content: content || (fileUrl ? (isSticker ? '🎨 Стикер' : `📎 ${fileName}`) : ''),
@@ -137,11 +157,15 @@ function App() {
     if (!file) return;
     const formData = new FormData();
     formData.append('file', file);
-    const { data } = await api.post('/upload', formData);
-    sendMessage(data.url, type, data.url, file.name);
+    try {
+      const { data } = await api.post('/upload', formData);
+      sendMessage(data.url, type, data.url, file.name);
+    } catch (err) {
+      toast.error('Ошибка загрузки');
+    }
   };
 
-  // Голосовые сообщения (кружок)
+  // Голосовые сообщения
   const startVoiceRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -160,7 +184,9 @@ function App() {
       mediaRecorder.start();
       setRecording(true);
       toast('🎙 Запись... Отпустите для отправки');
-    } catch { toast('Нет доступа к микрофону', { icon: '❌' }); }
+    } catch {
+      toast.error('Нет доступа к микрофону');
+    }
   };
 
   const stopVoiceRecording = () => {
@@ -170,7 +196,7 @@ function App() {
     }
   };
 
-  // Видеосообщения (кружок)
+  // Видеосообщения
   const startVideoRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -191,7 +217,9 @@ function App() {
       mediaRecorder.start();
       setVideoRecording(true);
       toast('🎥 Запись видео... Отпустите для отправки');
-    } catch { toast('Нет доступа к камере', { icon: '❌' }); }
+    } catch {
+      toast.error('Нет доступа к камере');
+    }
   };
 
   const stopVideoRecording = () => {
@@ -203,8 +231,10 @@ function App() {
 
   const searchUsers = async () => {
     if (!searchQuery) return;
-    const { data } = await api.get(`/users/search?q=${searchQuery}`);
-    setSearchResults(data);
+    try {
+      const { data } = await api.get(`/users/search?q=${searchQuery}`);
+      setSearchResults(data);
+    } catch (e) {}
   };
 
   const addContact = async (contactId) => {
@@ -274,6 +304,37 @@ function App() {
     setShowStickers(false);
   };
 
+  const handleLogin = async () => {
+    try {
+      const { data } = await axios.post(API_URL + '/auth/login', { email: authEmail, password: authPassword });
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+        setToken(data.token);
+        setUser(data.user);
+        initSocket();
+        loadData();
+      }
+    } catch {
+      toast.error('Ошибка входа');
+    }
+  };
+
+  const handleRegister = async () => {
+    try {
+      await axios.post(API_URL + '/auth/register', {
+        email: authEmail,
+        password: authPassword,
+        firstName: authFirstName,
+        lastName: authLastName,
+        username: authUsername
+      });
+      toast.success('Аккаунт зарегистрирован! Теперь войдите.');
+      setAuthMode('login');
+    } catch {
+      toast.error('Ошибка регистрации');
+    }
+  };
+
   const renderMessage = (msg) => {
     if (msg.type === 'voice') return <audio controls src={msg.fileUrl} style={{ maxWidth: '200px' }} />;
     if (msg.type === 'video') return <video controls src={msg.fileUrl} style={{ maxWidth: '250px', borderRadius: '12px' }} />;
@@ -282,35 +343,36 @@ function App() {
     return msg.content;
   };
 
-  const showLogin = () => {
-    // Простая форма входа/регистрации
-    document.body.innerHTML = '<div id="root" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#f9f6ff"><div class="auth-card"><h1>✨ Noris</h1><input id="email" placeholder="Email"/><input id="password" type="password" placeholder="Пароль"/><button onclick="window.login()">Войти</button><button onclick="window.showRegister()">Создать аккаунт</button></div></div>';
-    window.login = async () => {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      const { data } = await axios.post(API_URL + '/auth/login', { email, password });
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-        window.location.reload();
-      } else alert('Ошибка');
-    };
-    window.showRegister = () => {
-      document.getElementById('root').innerHTML = '<div class="auth-card"><h1>Регистрация</h1><input id="regEmail" placeholder="Email"/><input id="regPassword" type="password" placeholder="Пароль"/><input id="regFirstName" placeholder="Имя"/><input id="regLastName" placeholder="Фамилия"/><input id="regUsername" placeholder="Никнейм"/><button onclick="window.register()">Зарегистрироваться</button><button onclick="window.showLogin()">Назад</button></div>';
-    };
-    window.register = async () => {
-      const email = document.getElementById('regEmail').value;
-      const password = document.getElementById('regPassword').value;
-      const firstName = document.getElementById('regFirstName').value;
-      const lastName = document.getElementById('regLastName').value;
-      const username = document.getElementById('regUsername').value;
-      await axios.post(API_URL + '/auth/register', { email, password, firstName, lastName, username });
-      alert('Аккаунт зарегистрирован! Теперь войдите.');
-      showLogin();
-    };
-  };
+  // Экран авторизации
+  if (!user) {
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <h1>✨ Noris</h1>
+          {authMode === 'login' ? (
+            <>
+              <input type="email" placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
+              <input type="password" placeholder="Пароль" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
+              <button onClick={handleLogin}>Войти</button>
+              <button className="secondary" onClick={() => setAuthMode('register')}>Создать аккаунт</button>
+            </>
+          ) : (
+            <>
+              <input type="email" placeholder="Email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} />
+              <input type="password" placeholder="Пароль" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
+              <input type="text" placeholder="Имя" value={authFirstName} onChange={e => setAuthFirstName(e.target.value)} />
+              <input type="text" placeholder="Фамилия" value={authLastName} onChange={e => setAuthLastName(e.target.value)} />
+              <input type="text" placeholder="Никнейм (латиница)" value={authUsername} onChange={e => setAuthUsername(e.target.value)} />
+              <button onClick={handleRegister}>Зарегистрироваться</button>
+              <button className="secondary" onClick={() => setAuthMode('login')}>Назад</button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-  if (!user) return <div className="loading">Загрузка Noris...</div>;
-
+  // Основной интерфейс
   return (
     <div className="app">
       <Toaster position="top-right" />
@@ -390,11 +452,11 @@ function App() {
               <div className="sticker-panel">
                 {stickerPacks.map(pack => (
                   <div key={pack.id} className="sticker-pack">
-                    <div className="pack-name">{pack.name} {pack.coverSticker && <img src={pack.coverSticker} alt="" width="30" />}</div>
+                    <div className="pack-name">{pack.name}</div>
                     <button onClick={() => addStickerToPack(pack.id)}>+ Стикер</button>
                   </div>
                 ))}
-                <button onClick={() => addStickerPack(prompt('Введите ссылку стикерпака:'))}>➕ Добавить стикерпак</button>
+                <button onClick={() => addStickerPack(prompt('Введите ID стикерпака:'))}>➕ Добавить стикерпак</button>
               </div>
             )}
           </>
