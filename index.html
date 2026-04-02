@@ -46,8 +46,9 @@
 <div id="root">Загрузка...</div>
 
 <script>
-    const API_URL = 'https://noris-backend.onrender.com/api';
-    const SOCKET_URL = 'https://noris-backend.onrender.com';
+    // ============ КОНФИГ ============
+    const API_URL = 'https://noris.onrender.com/api';
+    const SOCKET_URL = 'https://noris.onrender.com';
     
     let token = localStorage.getItem('token');
     let user = null;
@@ -57,17 +58,29 @@
     let chats = [];
     let contacts = [];
     
-    function apiCall(endpoint, options = {}) {
-        return fetch(API_URL + endpoint, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-                ...options.headers
-            }
-        }).then(res => res.json());
+    // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
+    function showError(msg) {
+        alert('❌ ' + msg);
     }
     
+    async function apiCall(endpoint, options = {}) {
+        try {
+            const res = await fetch(API_URL + endpoint, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                    ...options.headers
+                }
+            });
+            return await res.json();
+        } catch (e) {
+            showError('Нет связи с сервером: ' + e.message);
+            return { error: 'Network error' };
+        }
+    }
+    
+    // ============ ОТРИСОВКА СТРАНИЦ ============
     function showLogin() {
         document.getElementById('root').innerHTML = `
             <div class="auth">
@@ -87,11 +100,11 @@
             <div class="auth">
                 <div class="auth-card">
                     <h1>Регистрация</h1>
-                    <input id="email" placeholder="Email">
-                    <input id="password" placeholder="Пароль" type="password">
-                    <input id="firstName" placeholder="Имя">
-                    <input id="lastName" placeholder="Фамилия">
-                    <input id="username" placeholder="Никнейм (латиница)">
+                    <input id="regEmail" placeholder="Email">
+                    <input id="regPassword" placeholder="Пароль" type="password">
+                    <input id="regFirstName" placeholder="Имя">
+                    <input id="regLastName" placeholder="Фамилия">
+                    <input id="regUsername" placeholder="Никнейм (латиница, цифры, _)">
                     <button onclick="doRegister()">Зарегистрироваться</button>
                     <button onclick="showLogin()">Назад</button>
                 </div>
@@ -104,17 +117,22 @@
             <div class="auth">
                 <div class="auth-card">
                     <h1>Подтверждение</h1>
-                    <p>Введите код из письма</p>
-                    <input id="code" placeholder="Код">
+                    <p>Введите код из письма (ссылка в логах Render)</p>
+                    <input id="verifyCode" placeholder="Код">
                     <button onclick="doVerify('${userId}')">Подтвердить</button>
                 </div>
             </div>
         `;
     }
     
+    // ============ API ВЫЗОВЫ ============
     async function doLogin() {
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
+        if (!email || !password) {
+            showError('Введите email и пароль');
+            return;
+        }
         const data = await apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
         if (data.token) {
             token = data.token;
@@ -123,29 +141,37 @@
             initSocket();
             showMain();
         } else {
-            alert('Ошибка входа: ' + (data.error || 'Неверные данные'));
+            showError(data.error || 'Ошибка входа');
         }
     }
     
     async function doRegister() {
-        const dataReg = {
-            email: document.getElementById('email').value,
-            password: document.getElementById('password').value,
-            firstName: document.getElementById('firstName').value,
-            lastName: document.getElementById('lastName').value,
-            username: document.getElementById('username').value
-        };
-        const data = await apiCall('/auth/register', { method: 'POST', body: JSON.stringify(dataReg) });
+        const email = document.getElementById('regEmail').value;
+        const password = document.getElementById('regPassword').value;
+        const firstName = document.getElementById('regFirstName').value;
+        const lastName = document.getElementById('regLastName').value;
+        const username = document.getElementById('regUsername').value;
+        
+        if (!email || !password || !firstName || !lastName || !username) {
+            showError('Заполните все поля');
+            return;
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            showError('Никнейм может содержать только латиницу, цифры и _');
+            return;
+        }
+        
+        const data = await apiCall('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, firstName, lastName, username }) });
         if (data.userId) {
-            alert('Код подтверждения отправлен на email! Проверьте почту (ссылка в логах Render)');
+            alert('✅ Код подтверждения отправлен на email! Проверьте почту (ссылка в логах Render)');
             showVerify(data.userId);
         } else {
-            alert('Ошибка: ' + (data.error || 'Проверьте данные'));
+            showError(data.error || 'Ошибка регистрации');
         }
     }
     
     async function doVerify(userId) {
-        const code = document.getElementById('code').value;
+        const code = document.getElementById('verifyCode').value;
         const data = await apiCall('/auth/verify', { method: 'POST', body: JSON.stringify({ userId, code }) });
         if (data.token) {
             token = data.token;
@@ -154,10 +180,11 @@
             initSocket();
             showMain();
         } else {
-            alert('Неверный код');
+            showError('Неверный код');
         }
     }
     
+    // ============ SOCKET ============
     function initSocket() {
         if (socket) socket.close();
         socket = io(SOCKET_URL, { auth: { token }, transports: ['websocket'] });
@@ -168,10 +195,11 @@
             }
             fetchChats();
         });
-        socket.on('connect', () => console.log('Socket connected'));
-        socket.on('disconnect', () => console.log('Socket disconnected'));
+        socket.on('connect', () => console.log('✅ Socket connected'));
+        socket.on('disconnect', () => console.log('❌ Socket disconnected'));
     }
     
+    // ============ ЗАГРУЗКА ДАННЫХ ============
     async function fetchChats() {
         const data = await apiCall('/chats');
         if (Array.isArray(data)) chats = data;
@@ -190,14 +218,15 @@
         renderMessages();
     }
     
-    function openChat(chat) {
+    // ============ ДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЯ ============
+    window.openChat = function(chat) {
         activeChat = chat;
         fetchMessages(chat.id);
         renderChats();
         if (socket) socket.emit('join_group', chat.id);
     }
     
-    async function sendMessage() {
+    window.sendMessage = async function() {
         const input = document.getElementById('messageInput');
         if (!input || !input.value.trim() || !activeChat) return;
         const content = input.value;
@@ -210,7 +239,7 @@
         input.value = '';
     }
     
-    async function searchUsers() {
+    window.searchUsers = async function() {
         const q = document.getElementById('searchInput')?.value;
         if (!q) return;
         const users = await apiCall('/users/search?q=' + q);
@@ -224,12 +253,13 @@
         }
     }
     
-    async function addContact(contactId) {
+    window.addContact = async function(contactId) {
         await apiCall('/users/contact', { method: 'POST', body: JSON.stringify({ contactId }) });
-        alert('Контакт добавлен');
+        alert('✅ Контакт добавлен');
         fetchContacts();
     }
     
+    // ============ ОТРИСОВКА ИНТЕРФЕЙСА ============
     function renderChats() {
         const container = document.getElementById('chatsList');
         if (!container) return;
@@ -269,12 +299,22 @@
         container.innerHTML = messages.map(msg => `
             <div class="message ${msg.senderId === user?.id ? 'mine' : 'theirs'}">
                 <div class="message-content">
-                    <p>${msg.content || msg.fileUrl || ''}</p>
+                    <p>${escapeHtml(msg.content || msg.fileUrl || '')}</p>
                     <small>${new Date(msg.timestamp).toLocaleTimeString()}</small>
                 </div>
             </div>
         `).join('');
         container.scrollTop = container.scrollHeight;
+    }
+    
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
     }
     
     function showMain() {
@@ -316,6 +356,7 @@
         renderMessages();
     }
     
+    // ============ ЗАПУСК ============
     if (token) {
         apiCall('/users/me').then(data => {
             if (data.user) {
@@ -336,8 +377,5 @@
         showLogin();
     }
 </script>
-</body>
-</html>
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </body>
 </html>
