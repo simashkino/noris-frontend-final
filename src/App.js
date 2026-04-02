@@ -25,6 +25,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [videoRecording, setVideoRecording] = useState(false);
+  const [recordingStart, setRecordingStart] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -35,6 +36,7 @@ function App() {
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
   const [editUsername, setEditUsername] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -47,17 +49,9 @@ function App() {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
 
-  useEffect(() => {
-    if (token) fetchUser();
-  }, [token]);
-
-  useEffect(() => {
-    if (socket && activeChat) socket.emit('join_chat', activeChat.id);
-  }, [socket, activeChat]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  useEffect(() => { if (token) fetchUser(); }, [token]);
+  useEffect(() => { if (socket && activeChat) socket.emit('join_chat', activeChat.id); }, [socket, activeChat]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const fetchUser = async () => {
     try {
@@ -67,11 +61,8 @@ function App() {
       setEditLastName(data.user.lastName);
       setEditUsername(data.user.username);
       initSocket();
-      loadAllData();
-    } catch {
-      localStorage.removeItem('token');
-      setToken(null);
-    }
+      loadAll();
+    } catch { localStorage.removeItem('token'); setToken(null); }
   };
 
   const initSocket = () => {
@@ -90,41 +81,26 @@ function App() {
     });
   };
 
-  const loadAllData = async () => {
+  const loadAll = async () => {
     await Promise.all([loadContacts(), loadChats(), loadGroups(), loadChannels(), loadStickerPacks()]);
   };
+  const loadContacts = async () => { try { const { data } = await api.get('/users/contacts'); setContacts(data); } catch(e) {} };
+  const loadChats = async () => { try { const { data } = await api.get('/chats'); setChats(data); } catch(e) {} };
+  const loadGroups = async () => { try { const { data } = await api.get('/groups'); setGroups(data); } catch(e) {} };
+  const loadChannels = async () => { try { const { data } = await api.get('/channels'); setChannels(data); } catch(e) {} };
+  const loadStickerPacks = async () => { try { const { data } = await api.get('/sticker-packs'); setStickerPacks(data); } catch(e) {} };
+  const loadMessages = async (chatId) => { try { const { data } = await api.get(`/messages/${chatId}`); setMessages(data); } catch(e) {} };
 
-  const loadContacts = async () => {
-    try { const { data } = await api.get('/users/contacts'); setContacts(data); } catch(e) {}
-  };
-  const loadChats = async () => {
-    try { const { data } = await api.get('/chats'); setChats(data); } catch(e) {}
-  };
-  const loadGroups = async () => {
-    try { const { data } = await api.get('/groups'); setGroups(data); } catch(e) {}
-  };
-  const loadChannels = async () => {
-    try { const { data } = await api.get('/channels'); setChannels(data); } catch(e) {}
-  };
-  const loadStickerPacks = async () => {
-    try { const { data } = await api.get('/sticker-packs'); setStickerPacks(data); } catch(e) {}
-  };
-  const loadMessages = async (chatId) => {
-    try { const { data } = await api.get(`/messages/${chatId}`); setMessages(data); } catch(e) {}
-  };
-
-  const sendMessage = async (content, type = 'text', fileUrl = null, fileName = null, isSticker = false) => {
+  const sendMessage = async (content, type = 'text', fileUrl = null, fileName = null, duration = 0, isSticker = false) => {
     if ((!content && !fileUrl) || !socket || !activeChat) return;
     socket.emit('send_message', {
       chatId: activeChat.id,
       content: content || (fileUrl ? (isSticker ? '🎨 Стикер' : `📎 ${fileName}`) : ''),
-      type,
-      receiverId: activeChat.type === 'user' ? activeChat.id : null,
-      fileUrl,
-      fileName,
-      isSticker
+      type, receiverId: activeChat.type === 'user' ? activeChat.id : null,
+      fileUrl, fileName, duration, isSticker, replyTo: replyTo?.id
     });
     setMessageText('');
+    setReplyTo(null);
   };
 
   const handleFileUpload = async (e) => {
@@ -136,7 +112,6 @@ function App() {
     sendMessage(data.url, 'file', data.url, file.name);
   };
 
-  // Голосовые сообщения
   const startVoiceRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -146,25 +121,23 @@ function App() {
       mediaRecorder.ondataavailable = e => chunks.push(e.data);
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
+        const duration = recordingStart ? Math.floor((Date.now() - recordingStart) / 1000) : 0;
         const formData = new FormData();
         formData.append('file', blob, 'voice.webm');
         const { data } = await api.post('/upload', formData);
-        sendMessage(data.url, 'voice', data.url, 'Голосовое');
+        sendMessage(data.url, 'voice', data.url, 'Голосовое', duration);
         stream.getTracks().forEach(track => track.stop());
+        setRecording(false);
+        setRecordingStart(null);
       };
       mediaRecorder.start();
       setRecording(true);
+      setRecordingStart(Date.now());
       toast('🎙 Запись... Отпустите для отправки');
     } catch { toast.error('Нет доступа к микрофону'); }
   };
-  const stopVoiceRecording = () => {
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-    }
-  };
+  const stopVoiceRecording = () => { if (mediaRecorderRef.current && recording) mediaRecorderRef.current.stop(); };
 
-  // Видеосообщения
   const startVideoRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -175,84 +148,101 @@ function App() {
       mediaRecorder.ondataavailable = e => chunks.push(e.data);
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: 'video/mp4' });
+        const duration = recordingStart ? Math.floor((Date.now() - recordingStart) / 1000) : 0;
         const formData = new FormData();
         formData.append('file', blob, 'video.mp4');
         const { data } = await api.post('/upload', formData);
-        sendMessage(data.url, 'video', data.url, 'Видео');
+        sendMessage(data.url, 'video', data.url, 'Видео', duration);
         stream.getTracks().forEach(track => track.stop());
         if (videoPreviewRef.current) videoPreviewRef.current.srcObject = null;
+        setVideoRecording(false);
+        setRecordingStart(null);
       };
       mediaRecorder.start();
       setVideoRecording(true);
+      setRecordingStart(Date.now());
       toast('🎥 Запись видео... Отпустите для отправки');
     } catch { toast.error('Нет доступа к камере'); }
   };
-  const stopVideoRecording = () => {
-    if (videoRecorderRef.current && videoRecording) {
-      videoRecorderRef.current.stop();
-      setVideoRecording(false);
-    }
-  };
+  const stopVideoRecording = () => { if (videoRecorderRef.current && videoRecording) videoRecorderRef.current.stop(); };
 
   const searchUsers = async () => {
     if (!searchQuery) return;
     const { data } = await api.get(`/users/search?q=${searchQuery}`);
     setSearchResults(data);
   };
-
   const addContact = async (contactId) => {
     await api.post('/users/contact', { contactId });
     toast.success('Контакт добавлен');
-    loadContacts();
-    loadChats();
-    setSearchResults([]);
-    setSearchQuery('');
+    loadContacts(); loadChats();
+    setSearchResults([]); setSearchQuery('');
     if (window.innerWidth <= 768) setSidebarOpen(false);
   };
-
   const openChat = async (chat) => {
     setActiveChat(chat);
     await loadMessages(chat.id);
     if (socket) socket.emit('join_chat', chat.id);
     if (window.innerWidth <= 768) setSidebarOpen(false);
     setShowStickers(false);
+    setReplyTo(null);
+  };
+  const deleteChat = async (chatId) => {
+    await api.post('/deleted-chats', { chatId });
+    loadChats();
+    if (activeChat?.id === chatId) setActiveChat(null);
+    toast.success('Чат удалён');
+  };
+  const pinChat = async (chatId) => {
+    await api.post('/pinned-chats', { chatId });
+    loadChats();
+    toast.success('Чат закреплён');
+  };
+  const unpinChat = async (chatId) => {
+    await api.delete(`/pinned-chats/${chatId}`);
+    loadChats();
+    toast.success('Чат откреплён');
+  };
+  const deleteMessage = async (msgId) => {
+    await api.delete(`/messages/${msgId}`);
+    loadMessages(activeChat.id);
+    toast.success('Сообщение удалено');
+  };
+  const pinMessage = async (msgId) => {
+    await api.post(`/messages/${msgId}/pin`);
+    loadMessages(activeChat.id);
+    toast.success('Сообщение закреплено');
   };
 
-  // Группы
   const createGroup = async () => {
     const name = prompt('Название группы:');
     if (!name) return;
     const { data } = await api.post('/groups', { name });
     toast.success('Группа создана');
-    loadGroups();
-    loadChats();
+    loadGroups(); loadChats();
     openChat({ id: data.id, name, type: 'group' });
   };
-
-  const addToGroup = async (groupId, userId) => {
-    await api.post(`/groups/${groupId}/add`, { userId });
-    toast.success('Участник добавлен');
+  const addToGroup = async (groupId) => {
+    const username = prompt('Username пользователя:');
+    if (!username) return;
+    const users = await api.get(`/users/search?q=${username}`);
+    if (users.data.length) {
+      await api.post(`/groups/${groupId}/add`, { userId: users.data[0].id });
+      toast.success('Участник добавлен');
+    } else toast.error('Пользователь не найден');
   };
-
-  // Каналы
   const createChannel = async () => {
     const name = prompt('Название канала:');
-    const username = prompt('Уникальный username канала (латиница):');
+    const username = prompt('Уникальный username:');
     if (!name || !username) return;
-    const { data } = await api.post('/channels', { name, username, isPublic: true });
+    const { data } = await api.post('/channels', { name, username });
     toast.success('Канал создан');
-    loadChannels();
-    loadChats();
+    loadChannels(); loadChats();
   };
-
   const joinChannel = async (channelId) => {
     await api.post(`/channels/${channelId}/join`);
     toast.success('Вы подписались');
-    loadChannels();
-    loadChats();
+    loadChannels(); loadChats();
   };
-
-  // Стикеры
   const createStickerPack = async () => {
     const name = prompt('Название стикерпака:');
     if (!name) return;
@@ -260,7 +250,6 @@ function App() {
     toast.success('Стикерпак создан');
     loadStickerPacks();
   };
-
   const addStickerToPack = async (packId) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -275,37 +264,24 @@ function App() {
     };
     input.click();
   };
-
-  const addStickerPack = async (inviteLink) => {
-    await api.post(`/sticker-packs/${inviteLink}/add`);
-    toast.success('Стикерпак добавлен');
+  const sendSticker = (stickerUrl) => {
+    sendMessage(stickerUrl, 'sticker', stickerUrl, 'Стикер', 0, true);
+    setShowStickers(false);
+  };
+  const addStickerPack = async () => {
+    const link = prompt('Введите ссылку стикерпака:');
+    if (link) await api.post(`/sticker-packs/${link}/add`);
     loadStickerPacks();
   };
 
-  const sendSticker = (stickerUrl) => {
-    sendMessage(stickerUrl, 'sticker', stickerUrl, 'Стикер', true);
-    setShowStickers(false);
-  };
-
-  // Редактирование профиля
   const updateProfile = async () => {
-    try {
-      await api.put('/users/profile', {
-        firstName: editFirstName,
-        lastName: editLastName,
-        username: editUsername
-      });
-      setUser({ ...user, firstName: editFirstName, lastName: editLastName, username: editUsername });
-      toast.success('Профиль обновлён');
-      setEditProfileMode(false);
-    } catch (err) {
-      toast.error('Ошибка обновления');
-    }
+    await api.put('/users/profile', { firstName: editFirstName, lastName: editLastName, username: editUsername });
+    setUser({ ...user, firstName: editFirstName, lastName: editLastName, username: editUsername });
+    toast.success('Профиль обновлён');
+    setEditProfileMode(false);
   };
-
   const updateAvatar = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
     const formData = new FormData();
     formData.append('avatar', file);
     const { data } = await api.post('/upload/avatar', formData);
@@ -317,40 +293,24 @@ function App() {
     try {
       const { data } = await axios.post(API_URL + '/auth/login', { email: authEmail, password: authPassword });
       localStorage.setItem('token', data.token);
-      setToken(data.token);
-      setUser(data.user);
-      initSocket();
-      loadAllData();
+      setToken(data.token); setUser(data.user);
+      initSocket(); loadAll();
     } catch { toast.error('Ошибка входа'); }
   };
-
   const handleRegister = async () => {
     try {
-      await axios.post(API_URL + '/auth/register', {
-        email: authEmail,
-        password: authPassword,
-        firstName: authFirstName,
-        lastName: authLastName,
-        username: authUsername
-      });
+      await axios.post(API_URL + '/auth/register', { email: authEmail, password: authPassword, firstName: authFirstName, lastName: authLastName, username: authUsername });
       toast.success('Аккаунт зарегистрирован! Теперь войдите.');
       setAuthMode('login');
     } catch { toast.error('Ошибка регистрации'); }
   };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
-    if (socket) socket.close();
-    window.location.reload();
-  };
+  const logout = () => { localStorage.removeItem('token'); setToken(null); setUser(null); if (socket) socket.close(); };
 
   const renderMessage = (msg) => {
     if (msg.type === 'voice') return <audio controls src={msg.fileUrl} style={{ maxWidth: '200px' }} />;
     if (msg.type === 'video') return <video controls src={msg.fileUrl} style={{ maxWidth: '250px', borderRadius: '12px' }} />;
     if (msg.type === 'file') return <a href={msg.fileUrl} target="_blank" rel="noreferrer">📎 {msg.fileName || 'Файл'}</a>;
-    if (msg.isSticker) return <img src={msg.fileUrl} alt="sticker" style={{ maxWidth: '120px', maxHeight: '120px' }} />;
+    if (msg.isSticker) return <img src={msg.fileUrl} alt="sticker" style={{ maxWidth: '120px' }} />;
     return msg.content;
   };
 
@@ -386,8 +346,8 @@ function App() {
     return (
       <div className="auth-container">
         <div className="auth-card">
-          <h1>✏️ Редактировать профиль</h1>
-          <input type="file" accept="image/*" onChange={updateAvatar} style={{ marginBottom: '16px' }} />
+          <h1>✏️ Редактировать</h1>
+          <input type="file" accept="image/*" onChange={updateAvatar} />
           <input type="text" placeholder="Имя" value={editFirstName} onChange={e => setEditFirstName(e.target.value)} />
           <input type="text" placeholder="Фамилия" value={editLastName} onChange={e => setEditLastName(e.target.value)} />
           <input type="text" placeholder="Никнейм" value={editUsername} onChange={e => setEditUsername(e.target.value)} />
@@ -402,77 +362,71 @@ function App() {
     <div className="app">
       <Toaster position="top-right" />
       {sidebarOpen && <div className="menu-overlay" onClick={() => setSidebarOpen(false)} />}
-      
       <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="profile">
           <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=9b59b6&color=fff`} alt="" />
-          <div className="profile-info">
-            <div className="profile-name">{user.firstName} {user.lastName}</div>
-            <div className="profile-username">@{user.username}</div>
-          </div>
-          <button onClick={() => setEditProfileMode(true)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✏️</button>
-          <button onClick={logout} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>🚪</button>
+          <div><strong>{user.firstName} {user.lastName}</strong><br/>@{user.username}</div>
+          <button onClick={() => setEditProfileMode(true)}>✏️</button>
+          <button onClick={logout}>🚪</button>
         </div>
-        
         <div className="search-section">
           <div className="search-box">
-            <input placeholder="Поиск людей" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyPress={e => e.key === 'Enter' && searchUsers()} />
+            <input placeholder="Поиск" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyPress={e => e.key === 'Enter' && searchUsers()} />
             <button onClick={searchUsers}>🔍</button>
           </div>
-          {searchResults.map(u => (
-            <div key={u.id} className="search-result" onClick={() => addContact(u.id)}>@{u.username} — {u.firstName} {u.lastName} ➕</div>
-          ))}
+          {searchResults.map(u => <div key={u.id} className="search-result" onClick={() => addContact(u.id)}>@{u.username} — {u.firstName} {u.lastName} ➕</div>)}
         </div>
-        
         <div className="section">📞 КОНТАКТЫ</div>
-        <div className="contacts-list">
-          {contacts.map(c => (
-            <div key={c.id} className="contact-item" onClick={() => openChat({ id: c.id, name: c.username, type: 'user' })}>
-              <img src={c.avatar || `https://ui-avatars.com/api/?name=${c.username}&background=9b59b6&color=fff`} alt="" />
-              <div><strong>{c.firstName} {c.lastName}</strong><br/><small>@{c.username}</small></div>
-              <span className={`status ${c.isOnline ? 'online' : 'offline'}`}></span>
+        {contacts.map(c => (
+          <div key={c.id} className="contact-item" onClick={() => openChat({ id: c.id, name: c.username, type: 'user' })}>
+            <img src={c.avatar || `https://ui-avatars.com/api/?name=${c.username}&background=9b59b6&color=fff`} alt="" />
+            <div><strong>{c.firstName} {c.lastName}</strong><br/>@{c.username}</div>
+            <span className={`status ${c.isOnline ? 'online' : 'offline'}`}></span>
+          </div>
+        ))}
+        <div className="section">💬 ЧАТЫ</div>
+        {chats.map(chat => (
+          <div key={chat.id} className="chat-item" onClick={() => openChat(chat)}>
+            <img src={chat.avatar || `https://ui-avatars.com/api/?name=${chat.name}&background=9b59b6&color=fff`} alt="" />
+            <span>{chat.name}</span>
+            <div className="chat-actions">
+              <button onClick={(e) => { e.stopPropagation(); pinChat(chat.id); }}>📌</button>
+              <button onClick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}>🗑️</button>
             </div>
-          ))}
-        </div>
-        
+          </div>
+        ))}
         <div className="section">👥 ГРУППЫ</div>
-        <div className="chats-list">
-          {groups.map(g => (
-            <div key={g.id} className="chat-item" onClick={() => openChat({ id: g.id, name: g.name, type: 'group' })}>👥 {g.name}</div>
-          ))}
-          <button onClick={createGroup} style={{ margin: '8px', padding: '8px', background: '#9b59b6', color: 'white', border: 'none', borderRadius: '20px' }}>+ Создать группу</button>
-        </div>
-        
+        {groups.map(g => <div key={g.id} className="chat-item" onClick={() => openChat({ id: g.id, name: g.name, type: 'group' })}>👥 {g.name}</div>)}
+        <button className="action-btn" onClick={createGroup}>+ Группа</button>
         <div className="section">📢 КАНАЛЫ</div>
-        <div className="chats-list">
-          {channels.map(c => (
-            <div key={c.id} className="chat-item" onClick={() => openChat({ id: c.id, name: c.name, type: 'channel' })}>📢 {c.name}</div>
-          ))}
-          <button onClick={createChannel} style={{ margin: '8px', padding: '8px', background: '#9b59b6', color: 'white', border: 'none', borderRadius: '20px' }}>+ Создать канал</button>
-        </div>
-        
-        <div className="actions">
-          <button onClick={createStickerPack}>➕ Стикерпак</button>
-        </div>
+        {channels.map(c => <div key={c.id} className="chat-item" onClick={() => openChat({ id: c.id, name: c.name, type: 'channel' })}>📢 {c.name}</div>)}
+        <button className="action-btn" onClick={createChannel}>+ Канал</button>
+        <button className="action-btn" onClick={createStickerPack}>+ Стикерпак</button>
       </div>
-      
+
       <div className="chat-area">
         <div className="chat-header">
           <button className="menu-btn" onClick={() => setSidebarOpen(true)}>☰</button>
-          <span>{activeChat ? activeChat.name : 'Noris Messenger'}</span>
-          {typing && <small className="typing">печатает...</small>}
-          {activeChat?.type === 'group' && <button onClick={() => { const userId = prompt('ID пользователя для добавления'); if(userId) addToGroup(activeChat.id, userId); }} style={{ marginLeft: 'auto', background: '#9b59b6', border: 'none', color: 'white', padding: '4px 12px', borderRadius: '20px' }}>+ Добавить</button>}
-          {activeChat?.type === 'channel' && !channels.find(c => c.id === activeChat.id)?.isSubscribed && <button onClick={() => joinChannel(activeChat.id)} style={{ marginLeft: 'auto', background: '#9b59b6', border: 'none', color: 'white', padding: '4px 12px', borderRadius: '20px' }}>Присоединиться</button>}
+          <span>{activeChat ? activeChat.name : 'Noris'}</span>
+          {typing && <span className="typing">печатает...</span>}
+          {activeChat?.type === 'group' && <button className="header-btn" onClick={() => addToGroup(activeChat.id)}>+ Добавить</button>}
+          {activeChat?.type === 'channel' && !channels.find(c => c.id === activeChat.id) && <button className="header-btn" onClick={() => joinChannel(activeChat.id)}>Присоединиться</button>}
         </div>
-        
         {activeChat ? (
           <>
             <div className="messages">
+              {replyTo && <div className="reply-bar">Ответ {replyTo.content.substring(0, 30)} <button onClick={() => setReplyTo(null)}>✖</button></div>}
               {messages.map(msg => (
                 <div key={msg.id} className={`message ${msg.senderId === user.id ? 'mine' : 'theirs'}`}>
                   <div className="bubble">
+                    {msg.replyTo && <div className="reply-preview">↳ {msg.replyTo}</div>}
                     {renderMessage(msg)}
-                    <div className="time">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    <div className="time">{new Date(msg.createdAt).toLocaleTimeString()}</div>
+                    <div className="msg-actions">
+                      <button onClick={() => setReplyTo(msg)}>↩️</button>
+                      <button onClick={() => pinMessage(msg.id)}>📌</button>
+                      <button onClick={() => deleteMessage(msg.id)}>🗑️</button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -481,8 +435,8 @@ function App() {
             <div className="input-area">
               <button className="icon-btn" onClick={() => fileInputRef.current.click()}>📎</button>
               <input ref={fileInputRef} type="file" hidden onChange={handleFileUpload} />
-              <button className="icon-btn" onMouseDown={startVoiceRecording} onMouseUp={stopVoiceRecording} onTouchStart={startVoiceRecording} onTouchEnd={stopVoiceRecording}>🎙</button>
-              <button className="icon-btn" onMouseDown={startVideoRecording} onMouseUp={stopVideoRecording} onTouchStart={startVideoRecording} onTouchEnd={stopVideoRecording}>📹</button>
+              <button className={`icon-btn ${recording ? 'recording' : ''}`} onMouseDown={startVoiceRecording} onMouseUp={stopVoiceRecording} onTouchStart={startVoiceRecording} onTouchEnd={stopVoiceRecording}>🎙</button>
+              <button className={`icon-btn ${videoRecording ? 'recording' : ''}`} onMouseDown={startVideoRecording} onMouseUp={stopVideoRecording} onTouchStart={startVideoRecording} onTouchEnd={stopVideoRecording}>📹</button>
               <button className="icon-btn" onClick={() => setShowStickers(!showStickers)}>😊</button>
               <input value={messageText} onChange={e => setMessageText(e.target.value)} onKeyPress={e => e.key === 'Enter' && sendMessage(messageText)} placeholder="Сообщение" />
               <button className="send-btn" onClick={() => sendMessage(messageText)}>➤</button>
@@ -492,22 +446,19 @@ function App() {
                 {stickerPacks.map(pack => (
                   <div key={pack.id} className="sticker-pack">
                     <div className="pack-name">{pack.name}</div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {pack.stickers?.map(s => <img key={s.id} src={s.imageUrl} onClick={() => sendSticker(s.imageUrl)} style={{ width: '60px', cursor: 'pointer' }} alt="sticker" />)}
+                    <div className="sticker-list">
+                      {pack.stickers?.map(s => <img key={s.id} src={s.imageUrl} onClick={() => sendSticker(s.imageUrl)} alt="sticker" />)}
                     </div>
-                    <button onClick={() => addStickerToPack(pack.id)}>+ Добавить стикер</button>
+                    <button onClick={() => addStickerToPack(pack.id)}>+ Стикер</button>
                   </div>
                 ))}
-                <button onClick={() => addStickerPack(prompt('Введите ID стикерпака:'))}>➕ Добавить стикерпак</button>
+                <button onClick={addStickerPack}>➕ Добавить стикерпак</button>
               </div>
             )}
           </>
-        ) : (
-          <div className="empty">✨ Noris Messenger<br/>Нажмите ☰, чтобы найти друзей</div>
-        )}
+        ) : <div className="empty">✨ Noris<br/>Нажмите ☰, чтобы начать</div>}
       </div>
-      
-      {videoRecording && <video ref={videoPreviewRef} autoPlay muted style={{ position: 'fixed', bottom: 100, right: 20, width: 100, borderRadius: 50, border: '2px solid #9b59b6', zIndex: 200 }} />}
+      {videoRecording && <video ref={videoPreviewRef} autoPlay muted className="video-preview" />}
     </div>
   );
 }
