@@ -14,18 +14,33 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [chats, setChats] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [channels, setChannels] = useState([]);
+  const [stickerPacks, setStickerPacks] = useState([]);
+  const [showStickers, setShowStickers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [messageText, setMessageText] = useState('');
   const [typing, setTyping] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [videoRecording, setVideoRecording] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authFirstName, setAuthFirstName] = useState('');
   const [authLastName, setAuthLastName] = useState('');
   const [authUsername, setAuthUsername] = useState('');
+  const [editProfileMode, setEditProfileMode] = useState(false);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const videoRecorderRef = useRef(null);
+  const videoPreviewRef = useRef(null);
 
   const api = axios.create({
     baseURL: API_URL,
@@ -48,9 +63,11 @@ function App() {
     try {
       const { data } = await api.get('/users/me');
       setUser(data.user);
+      setEditFirstName(data.user.firstName);
+      setEditLastName(data.user.lastName);
+      setEditUsername(data.user.username);
       initSocket();
-      loadChats();
-      loadContacts();
+      loadAllData();
     } catch {
       localStorage.removeItem('token');
       setToken(null);
@@ -73,34 +90,39 @@ function App() {
     });
   };
 
+  const loadAllData = async () => {
+    await Promise.all([loadContacts(), loadChats(), loadGroups(), loadChannels(), loadStickerPacks()]);
+  };
+
   const loadContacts = async () => {
-    try {
-      const { data } = await api.get('/users/contacts');
-      setContacts(data);
-    } catch (e) {}
+    try { const { data } = await api.get('/users/contacts'); setContacts(data); } catch(e) {}
   };
-
   const loadChats = async () => {
-    try {
-      const { data } = await api.get('/chats');
-      setChats(data);
-    } catch (e) {}
+    try { const { data } = await api.get('/chats'); setChats(data); } catch(e) {}
   };
-
+  const loadGroups = async () => {
+    try { const { data } = await api.get('/groups'); setGroups(data); } catch(e) {}
+  };
+  const loadChannels = async () => {
+    try { const { data } = await api.get('/channels'); setChannels(data); } catch(e) {}
+  };
+  const loadStickerPacks = async () => {
+    try { const { data } = await api.get('/sticker-packs'); setStickerPacks(data); } catch(e) {}
+  };
   const loadMessages = async (chatId) => {
-    try {
-      const { data } = await api.get(`/messages/${chatId}`);
-      setMessages(data);
-    } catch (e) {}
+    try { const { data } = await api.get(`/messages/${chatId}`); setMessages(data); } catch(e) {}
   };
 
-  const sendMessage = async (content) => {
-    if (!content || !socket || !activeChat) return;
+  const sendMessage = async (content, type = 'text', fileUrl = null, fileName = null, isSticker = false) => {
+    if ((!content && !fileUrl) || !socket || !activeChat) return;
     socket.emit('send_message', {
       chatId: activeChat.id,
-      content,
-      type: 'text',
-      receiverId: activeChat.type === 'user' ? activeChat.id : null
+      content: content || (fileUrl ? (isSticker ? '🎨 Стикер' : `📎 ${fileName}`) : ''),
+      type,
+      receiverId: activeChat.type === 'user' ? activeChat.id : null,
+      fileUrl,
+      fileName,
+      isSticker
     });
     setMessageText('');
   };
@@ -111,14 +133,65 @@ function App() {
     const formData = new FormData();
     formData.append('file', file);
     const { data } = await api.post('/upload', formData);
-    socket.emit('send_message', {
-      chatId: activeChat.id,
-      content: `📎 ${file.name}: ${data.url}`,
-      type: 'file',
-      receiverId: activeChat.type === 'user' ? activeChat.id : null,
-      fileUrl: data.url,
-      fileName: file.name
-    });
+    sendMessage(data.url, 'file', data.url, file.name);
+  };
+
+  // Голосовые сообщения
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      const chunks = [];
+      mediaRecorder.ondataavailable = e => chunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const formData = new FormData();
+        formData.append('file', blob, 'voice.webm');
+        const { data } = await api.post('/upload', formData);
+        sendMessage(data.url, 'voice', data.url, 'Голосовое');
+        stream.getTracks().forEach(track => track.stop());
+      };
+      mediaRecorder.start();
+      setRecording(true);
+      toast('🎙 Запись... Отпустите для отправки');
+    } catch { toast.error('Нет доступа к микрофону'); }
+  };
+  const stopVoiceRecording = () => {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+  };
+
+  // Видеосообщения
+  const startVideoRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (videoPreviewRef.current) videoPreviewRef.current.srcObject = stream;
+      const mediaRecorder = new MediaRecorder(stream);
+      videoRecorderRef.current = mediaRecorder;
+      const chunks = [];
+      mediaRecorder.ondataavailable = e => chunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'video/mp4' });
+        const formData = new FormData();
+        formData.append('file', blob, 'video.mp4');
+        const { data } = await api.post('/upload', formData);
+        sendMessage(data.url, 'video', data.url, 'Видео');
+        stream.getTracks().forEach(track => track.stop());
+        if (videoPreviewRef.current) videoPreviewRef.current.srcObject = null;
+      };
+      mediaRecorder.start();
+      setVideoRecording(true);
+      toast('🎥 Запись видео... Отпустите для отправки');
+    } catch { toast.error('Нет доступа к камере'); }
+  };
+  const stopVideoRecording = () => {
+    if (videoRecorderRef.current && videoRecording) {
+      videoRecorderRef.current.stop();
+      setVideoRecording(false);
+    }
   };
 
   const searchUsers = async () => {
@@ -132,12 +205,112 @@ function App() {
     toast.success('Контакт добавлен');
     loadContacts();
     loadChats();
+    setSearchResults([]);
+    setSearchQuery('');
+    if (window.innerWidth <= 768) setSidebarOpen(false);
   };
 
   const openChat = async (chat) => {
     setActiveChat(chat);
     await loadMessages(chat.id);
     if (socket) socket.emit('join_chat', chat.id);
+    if (window.innerWidth <= 768) setSidebarOpen(false);
+    setShowStickers(false);
+  };
+
+  // Группы
+  const createGroup = async () => {
+    const name = prompt('Название группы:');
+    if (!name) return;
+    const { data } = await api.post('/groups', { name });
+    toast.success('Группа создана');
+    loadGroups();
+    loadChats();
+    openChat({ id: data.id, name, type: 'group' });
+  };
+
+  const addToGroup = async (groupId, userId) => {
+    await api.post(`/groups/${groupId}/add`, { userId });
+    toast.success('Участник добавлен');
+  };
+
+  // Каналы
+  const createChannel = async () => {
+    const name = prompt('Название канала:');
+    const username = prompt('Уникальный username канала (латиница):');
+    if (!name || !username) return;
+    const { data } = await api.post('/channels', { name, username, isPublic: true });
+    toast.success('Канал создан');
+    loadChannels();
+    loadChats();
+  };
+
+  const joinChannel = async (channelId) => {
+    await api.post(`/channels/${channelId}/join`);
+    toast.success('Вы подписались');
+    loadChannels();
+    loadChats();
+  };
+
+  // Стикеры
+  const createStickerPack = async () => {
+    const name = prompt('Название стикерпака:');
+    if (!name) return;
+    const { data } = await api.post('/sticker-packs', { name });
+    toast.success('Стикерпак создан');
+    loadStickerPacks();
+  };
+
+  const addStickerToPack = async (packId) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append('sticker', file);
+      await api.post(`/sticker-packs/${packId}/add-sticker`, formData);
+      toast.success('Стикер добавлен');
+      loadStickerPacks();
+    };
+    input.click();
+  };
+
+  const addStickerPack = async (inviteLink) => {
+    await api.post(`/sticker-packs/${inviteLink}/add`);
+    toast.success('Стикерпак добавлен');
+    loadStickerPacks();
+  };
+
+  const sendSticker = (stickerUrl) => {
+    sendMessage(stickerUrl, 'sticker', stickerUrl, 'Стикер', true);
+    setShowStickers(false);
+  };
+
+  // Редактирование профиля
+  const updateProfile = async () => {
+    try {
+      await api.put('/users/profile', {
+        firstName: editFirstName,
+        lastName: editLastName,
+        username: editUsername
+      });
+      setUser({ ...user, firstName: editFirstName, lastName: editLastName, username: editUsername });
+      toast.success('Профиль обновлён');
+      setEditProfileMode(false);
+    } catch (err) {
+      toast.error('Ошибка обновления');
+    }
+  };
+
+  const updateAvatar = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const { data } = await api.post('/upload/avatar', formData);
+    setUser({ ...user, avatar: data.url });
+    toast.success('Аватар обновлён');
   };
 
   const handleLogin = async () => {
@@ -147,11 +320,8 @@ function App() {
       setToken(data.token);
       setUser(data.user);
       initSocket();
-      loadChats();
-      loadContacts();
-    } catch {
-      toast.error('Ошибка входа');
-    }
+      loadAllData();
+    } catch { toast.error('Ошибка входа'); }
   };
 
   const handleRegister = async () => {
@@ -165,9 +335,23 @@ function App() {
       });
       toast.success('Аккаунт зарегистрирован! Теперь войдите.');
       setAuthMode('login');
-    } catch {
-      toast.error('Ошибка регистрации');
-    }
+    } catch { toast.error('Ошибка регистрации'); }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    if (socket) socket.close();
+    window.location.reload();
+  };
+
+  const renderMessage = (msg) => {
+    if (msg.type === 'voice') return <audio controls src={msg.fileUrl} style={{ maxWidth: '200px' }} />;
+    if (msg.type === 'video') return <video controls src={msg.fileUrl} style={{ maxWidth: '250px', borderRadius: '12px' }} />;
+    if (msg.type === 'file') return <a href={msg.fileUrl} target="_blank" rel="noreferrer">📎 {msg.fileName || 'Файл'}</a>;
+    if (msg.isSticker) return <img src={msg.fileUrl} alt="sticker" style={{ maxWidth: '120px', maxHeight: '120px' }} />;
+    return msg.content;
   };
 
   if (!user) {
@@ -198,75 +382,134 @@ function App() {
     );
   }
 
+  if (editProfileMode) {
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <h1>✏️ Редактировать профиль</h1>
+          <input type="file" accept="image/*" onChange={updateAvatar} style={{ marginBottom: '16px' }} />
+          <input type="text" placeholder="Имя" value={editFirstName} onChange={e => setEditFirstName(e.target.value)} />
+          <input type="text" placeholder="Фамилия" value={editLastName} onChange={e => setEditLastName(e.target.value)} />
+          <input type="text" placeholder="Никнейм" value={editUsername} onChange={e => setEditUsername(e.target.value)} />
+          <button onClick={updateProfile}>Сохранить</button>
+          <button className="secondary" onClick={() => setEditProfileMode(false)}>Отмена</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <Toaster position="top-right" />
-      <div className="sidebar">
+      {sidebarOpen && <div className="menu-overlay" onClick={() => setSidebarOpen(false)} />}
+      
+      <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="profile">
           <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=9b59b6&color=fff`} alt="" />
-          <div><strong>{user.firstName} {user.lastName}</strong><br/>@{user.username}</div>
-          <button onClick={() => { localStorage.removeItem('token'); window.location.reload(); }}>🚪</button>
+          <div className="profile-info">
+            <div className="profile-name">{user.firstName} {user.lastName}</div>
+            <div className="profile-username">@{user.username}</div>
+          </div>
+          <button onClick={() => setEditProfileMode(true)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>✏️</button>
+          <button onClick={logout} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>🚪</button>
         </div>
+        
         <div className="search-section">
           <div className="search-box">
-            <input placeholder="Поиск по никнейму" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+            <input placeholder="Поиск людей" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyPress={e => e.key === 'Enter' && searchUsers()} />
             <button onClick={searchUsers}>🔍</button>
           </div>
           {searchResults.map(u => (
-            <div key={u.id} className="search-result" onClick={() => addContact(u.id)}>@{u.username} — {u.firstName} {u.lastName} +</div>
+            <div key={u.id} className="search-result" onClick={() => addContact(u.id)}>@{u.username} — {u.firstName} {u.lastName} ➕</div>
           ))}
         </div>
+        
         <div className="section">📞 КОНТАКТЫ</div>
-        {contacts.map(c => (
-          <div key={c.id} className="chat-item" onClick={() => openChat({ id: c.id, name: c.username, type: 'user' })}>
-            <img src={c.avatar || `https://ui-avatars.com/api/?name=${c.username}&background=9b59b6&color=fff`} alt="" />
-            <span>{c.firstName} {c.lastName}</span>
-            <span className={`status ${c.isOnline ? 'online' : 'offline'}`}></span>
-          </div>
-        ))}
-        <div className="section">💬 ЧАТЫ</div>
-        {chats.map(chat => (
-          <div key={chat.id} className="chat-item" onClick={() => openChat(chat)}>
-            <img src={chat.avatar || `https://ui-avatars.com/api/?name=${chat.name}&background=9b59b6&color=fff`} alt="" />
-            <span>{chat.name}</span>
-          </div>
-        ))}
+        <div className="contacts-list">
+          {contacts.map(c => (
+            <div key={c.id} className="contact-item" onClick={() => openChat({ id: c.id, name: c.username, type: 'user' })}>
+              <img src={c.avatar || `https://ui-avatars.com/api/?name=${c.username}&background=9b59b6&color=fff`} alt="" />
+              <div><strong>{c.firstName} {c.lastName}</strong><br/><small>@{c.username}</small></div>
+              <span className={`status ${c.isOnline ? 'online' : 'offline'}`}></span>
+            </div>
+          ))}
+        </div>
+        
+        <div className="section">👥 ГРУППЫ</div>
+        <div className="chats-list">
+          {groups.map(g => (
+            <div key={g.id} className="chat-item" onClick={() => openChat({ id: g.id, name: g.name, type: 'group' })}>👥 {g.name}</div>
+          ))}
+          <button onClick={createGroup} style={{ margin: '8px', padding: '8px', background: '#9b59b6', color: 'white', border: 'none', borderRadius: '20px' }}>+ Создать группу</button>
+        </div>
+        
+        <div className="section">📢 КАНАЛЫ</div>
+        <div className="chats-list">
+          {channels.map(c => (
+            <div key={c.id} className="chat-item" onClick={() => openChat({ id: c.id, name: c.name, type: 'channel' })}>📢 {c.name}</div>
+          ))}
+          <button onClick={createChannel} style={{ margin: '8px', padding: '8px', background: '#9b59b6', color: 'white', border: 'none', borderRadius: '20px' }}>+ Создать канал</button>
+        </div>
+        
         <div className="actions">
-          <button onClick={() => alert('Группы и каналы будут добавлены в следующем обновлении')}>+ Группа</button>
-          <button onClick={() => alert('Стикеры скоро')}>+ Стикерпак</button>
+          <button onClick={createStickerPack}>➕ Стикерпак</button>
         </div>
       </div>
+      
       <div className="chat-area">
+        <div className="chat-header">
+          <button className="menu-btn" onClick={() => setSidebarOpen(true)}>☰</button>
+          <span>{activeChat ? activeChat.name : 'Noris Messenger'}</span>
+          {typing && <small className="typing">печатает...</small>}
+          {activeChat?.type === 'group' && <button onClick={() => { const userId = prompt('ID пользователя для добавления'); if(userId) addToGroup(activeChat.id, userId); }} style={{ marginLeft: 'auto', background: '#9b59b6', border: 'none', color: 'white', padding: '4px 12px', borderRadius: '20px' }}>+ Добавить</button>}
+          {activeChat?.type === 'channel' && !channels.find(c => c.id === activeChat.id)?.isSubscribed && <button onClick={() => joinChannel(activeChat.id)} style={{ marginLeft: 'auto', background: '#9b59b6', border: 'none', color: 'white', padding: '4px 12px', borderRadius: '20px' }}>Присоединиться</button>}
+        </div>
+        
         {activeChat ? (
           <>
-            <div className="chat-header">
-              <span>{activeChat.name}</span>
-              {typing && <small className="typing">печатает...</small>}
-            </div>
             <div className="messages">
               {messages.map(msg => (
                 <div key={msg.id} className={`message ${msg.senderId === user.id ? 'mine' : 'theirs'}`}>
                   <div className="bubble">
-                    {msg.type === 'file' ? <a href={msg.fileUrl} target="_blank" rel="noreferrer">📎 {msg.fileName || 'Файл'}</a> : msg.content}
-                    <div className="time">{new Date(msg.createdAt).toLocaleTimeString()}</div>
+                    {renderMessage(msg)}
+                    <div className="time">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
                 </div>
               ))}
               <div ref={messagesEndRef} />
             </div>
             <div className="input-area">
-              <button className="icon" onClick={() => fileInputRef.current.click()}>📎</button>
+              <button className="icon-btn" onClick={() => fileInputRef.current.click()}>📎</button>
               <input ref={fileInputRef} type="file" hidden onChange={handleFileUpload} />
+              <button className="icon-btn" onMouseDown={startVoiceRecording} onMouseUp={stopVoiceRecording} onTouchStart={startVoiceRecording} onTouchEnd={stopVoiceRecording}>🎙</button>
+              <button className="icon-btn" onMouseDown={startVideoRecording} onMouseUp={stopVideoRecording} onTouchStart={startVideoRecording} onTouchEnd={stopVideoRecording}>📹</button>
+              <button className="icon-btn" onClick={() => setShowStickers(!showStickers)}>😊</button>
               <input value={messageText} onChange={e => setMessageText(e.target.value)} onKeyPress={e => e.key === 'Enter' && sendMessage(messageText)} placeholder="Сообщение" />
-              <button className="send" onClick={() => sendMessage(messageText)}>➤</button>
+              <button className="send-btn" onClick={() => sendMessage(messageText)}>➤</button>
             </div>
+            {showStickers && (
+              <div className="sticker-panel">
+                {stickerPacks.map(pack => (
+                  <div key={pack.id} className="sticker-pack">
+                    <div className="pack-name">{pack.name}</div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {pack.stickers?.map(s => <img key={s.id} src={s.imageUrl} onClick={() => sendSticker(s.imageUrl)} style={{ width: '60px', cursor: 'pointer' }} alt="sticker" />)}
+                    </div>
+                    <button onClick={() => addStickerToPack(pack.id)}>+ Добавить стикер</button>
+                  </div>
+                ))}
+                <button onClick={() => addStickerPack(prompt('Введите ID стикерпака:'))}>➕ Добавить стикерпак</button>
+              </div>
+            )}
           </>
         ) : (
-          <div className="empty">✨ Выберите чат, чтобы начать общение</div>
+          <div className="empty">✨ Noris Messenger<br/>Нажмите ☰, чтобы найти друзей</div>
         )}
       </div>
+      
+      {videoRecording && <video ref={videoPreviewRef} autoPlay muted style={{ position: 'fixed', bottom: 100, right: 20, width: 100, borderRadius: 50, border: '2px solid #9b59b6', zIndex: 200 }} />}
     </div>
   );
 }
 
-export default App;ault App;
+export default App;
